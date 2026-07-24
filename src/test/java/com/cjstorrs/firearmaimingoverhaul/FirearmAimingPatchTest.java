@@ -31,6 +31,7 @@ public final class FirearmAimingPatchTest {
         testDistanceChangesOnSameTargetPreserveWork();
         testRecoilReopensMinimumSpread();
         testStabilizationProgressesHitChanceToGuarantee();
+        testShotHitChanceUsesPreRecoilStabilization();
         testFullyStabilizedTargetedHeadshotsAreLethal();
         testHeadshotDiagnosticsExplainDecision();
         testAccuracyChangesAreScopedToValidTargets();
@@ -420,6 +421,45 @@ public final class FirearmAimingPatchTest {
             FirearmAimRuntime.calculatePromotedHitChance(100, 0.25F) == 100,
             "natural guarantees must remain guarantees"
         );
+    }
+
+    private static void testShotHitChanceUsesPreRecoilStabilization() {
+        resetRuntime();
+        IsoPlayer player = createPlayer(15.0F, 0);
+        HandWeapon weapon = (HandWeapon)player.getPrimaryHandItem();
+        HitInfo target = setTarget(player, 5.0F, new IsoMovingObject(1));
+        runAimingUpdate(player, 56.25F);
+
+        FirearmAimRuntime.captureShotStabilization(player, weapon);
+        player.setAimingDelay(1.0F);
+        FirearmAimRuntime.synchronizePostShotDelay(player);
+        player.setAiming(false);
+
+        target.chance = 20;
+        FirearmAimRuntime.promoteStabilizationHitChance(player);
+        check(
+            target.chance == 100,
+            "full-lock shot chance must use the pre-recoil stabilization snapshot"
+        );
+        FirearmAimRuntime.endShot();
+
+        resetRuntime();
+        player = createPlayer(15.0F, 0);
+        weapon = (HandWeapon)player.getPrimaryHandItem();
+        setTarget(player, 5.0F, new IsoMovingObject(1));
+        runAimingUpdate(player, 56.25F);
+        FirearmAimRuntime.captureShotStabilization(player, weapon);
+        player.setAimingDelay(1.0F);
+        FirearmAimRuntime.synchronizePostShotDelay(player);
+
+        target = setTarget(player, 5.0F, new IsoMovingObject(2));
+        target.chance = 20;
+        FirearmAimRuntime.promoteStabilizationHitChance(player);
+        check(
+            target.chance < 100,
+            "pre-recoil snapshot must not guarantee a different target"
+        );
+        FirearmAimRuntime.endShot();
     }
 
     private static void testFullyStabilizedTargetedHeadshotsAreLethal() {

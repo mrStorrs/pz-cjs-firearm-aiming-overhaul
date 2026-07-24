@@ -6,7 +6,7 @@ public final class Main {
 
     public static void main(String[] args) {
         System.out.println(
-            "[cjsFirearmAimingOverhaul] Loading v1.8.1 headshot diagnostic patches."
+            "[cjsFirearmAimingOverhaul] Loading v1.8.2 pre-recoil shot snapshot patches."
         );
     }
 }

@@ -149,7 +149,9 @@ below complete progress is capped at 99, so only full stabilization—or a
 natural vanilla 100—receives the mod's guarantee.
 
 Full stabilization is captured when the shot starts, before recoil reopens the
-crosshair. If the successful hit then follows vanilla's explicit
+crosshair. That pre-recoil snapshot also controls the shot's final hit-chance
+promotion, so recoil cannot retroactively turn a fully stabilized shot into a
+failed Damage Chance roll. If the successful hit then follows vanilla's explicit
 cursor-targeted head path, the final damage is raised to the target's remaining
 health for zombies and animals. The normal `Hit` and `hitConsequences` flow
 still handles damage, death animation, kill credit, XP, and other hooks.
@@ -184,8 +186,8 @@ Headshot diagnostics write a compact sequence for each shot to
 `~/Zomboid/console.txt` with the prefix
 `[cjsFirearmAimingOverhaul][headshot-debug]`. The sequence reports captured
 stabilization, Project Zomboid's targeted body part, the final damage decision,
-and a shot summary. Disable the sandbox toggle after collecting the needed
-shots.
+the pre-recoil and promoted hit chances, and a shot summary. Disable the sandbox
+toggle after collecting the needed shots.
 
 ## Build
 

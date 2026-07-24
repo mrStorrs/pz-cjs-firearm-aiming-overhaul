@@ -247,7 +247,12 @@ public final class FirearmAimRuntime {
     }
 
     public static void promoteStabilizationHitChance(IsoGameCharacter character) {
-        if (!character.isAiming() || getAimedFirearm(character) == null) {
+        HandWeapon weapon = getAimedFirearm(character);
+        ShotScope shot = SHOT_SCOPE.get();
+        boolean capturedShot = shot.shotId != 0L
+            && shot.owner == character
+            && shot.weapon == weapon;
+        if (weapon == null) {
             return;
         }
 
@@ -256,10 +261,34 @@ public final class FirearmAimRuntime {
             return;
         }
 
-        hitInfoList.get(0).chance = calculatePromotedHitChance(
-            hitInfoList.get(0).chance,
-            getStabilizationProgress(character)
+        HitInfo primaryTarget = hitInfoList.get(0);
+        boolean capturedTarget = capturedShot
+            && getTargetKey(primaryTarget) == shot.primaryTargetKey;
+        if (!capturedTarget && !character.isAiming()) {
+            return;
+        }
+
+        int originalChance = primaryTarget.chance;
+        float progress = capturedTarget
+            ? shot.stabilizationProgress
+            : getStabilizationProgress(character);
+        primaryTarget.chance = calculatePromotedHitChance(
+            originalChance,
+            progress
         );
+
+        if (capturedShot && shot.diagnosticLogging) {
+            logHeadshotDiagnostic(
+                "event=hit_chance"
+                    + " shot=" + shot.shotId
+                    + " source=" + (capturedTarget
+                        ? "pre_recoil_snapshot"
+                        : "live_target_state")
+                    + " progress=" + formatDiagnosticFloat(progress)
+                    + " incomingChance=" + originalChance
+                    + " outgoingChance=" + primaryTarget.chance
+            );
+        }
     }
 
     public static void beginAccuracyCalculation(

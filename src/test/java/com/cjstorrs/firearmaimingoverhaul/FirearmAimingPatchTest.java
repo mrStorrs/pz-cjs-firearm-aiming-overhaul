@@ -8,6 +8,7 @@ import me.zed_0xff.zombie_buddy.PatchEngine;
 import zombie.SandboxOptions;
 import zombie.characters.IsoGameCharacter;
 import zombie.characters.IsoPlayer;
+import zombie.core.physics.RagdollBodyPart;
 import zombie.inventory.types.HandWeapon;
 import zombie.iso.IsoMovingObject;
 import zombie.network.fields.hit.HitInfo;
@@ -27,6 +28,7 @@ public final class FirearmAimingPatchTest {
         testDistanceChangesOnSameTargetPreserveWork();
         testRecoilReopensMinimumSpread();
         testStabilizationProgressesHitChanceToGuarantee();
+        testFullyStabilizedTargetedHeadshotsAreLethal();
         testAccuracyChangesAreScopedToValidTargets();
         testPatchMetadata();
         testZombieBuddyDiscovery();
@@ -403,6 +405,173 @@ public final class FirearmAimingPatchTest {
         );
     }
 
+    private static void testFullyStabilizedTargetedHeadshotsAreLethal() {
+        resetRuntime();
+        IsoPlayer player = createPlayer(15.0F, 0);
+        HandWeapon weapon = (HandWeapon)player.getPrimaryHandItem();
+        IsoGameCharacter zombie = new IsoGameCharacter();
+        zombie.setZombie(true);
+        zombie.setHealth(3.5F);
+        setTarget(player, 5.0F, zombie);
+        runAimingUpdate(player, 56.25F);
+
+        FirearmAimRuntime.captureShotStabilization(player, weapon);
+        FirearmAimRuntime.recordTargetedBodyPart(
+            player,
+            weapon,
+            zombie,
+            RagdollBodyPart.BODYPART_HEAD.ordinal()
+        );
+        checkClose(
+            3.5F,
+            FirearmAimRuntime.guaranteeLethalHeadshotDamage(
+                zombie,
+                weapon,
+                player,
+                false,
+                0.4F
+            ),
+            "fully stabilized targeted zombie headshot"
+        );
+        checkClose(
+            0.4F,
+            FirearmAimRuntime.guaranteeLethalHeadshotDamage(
+                zombie,
+                weapon,
+                player,
+                false,
+                0.4F
+            ),
+            "lethal marker must be consumed by the matching hit"
+        );
+
+        resetRuntime();
+        player = createPlayer(15.0F, 0);
+        weapon = (HandWeapon)player.getPrimaryHandItem();
+        IsoGameCharacter animal = new IsoGameCharacter();
+        animal.setAnimal(true);
+        animal.setHealth(2.25F);
+        setTarget(player, 5.0F, animal);
+        runAimingUpdate(player, 56.25F);
+        FirearmAimRuntime.captureShotStabilization(player, weapon);
+        FirearmAimRuntime.recordTargetedBodyPart(
+            player,
+            weapon,
+            animal,
+            RagdollBodyPart.BODYPART_HEAD.ordinal()
+        );
+        checkClose(
+            2.25F,
+            FirearmAimRuntime.guaranteeLethalHeadshotDamage(
+                animal,
+                weapon,
+                player,
+                false,
+                0.4F
+            ),
+            "fully stabilized targeted animal headshot"
+        );
+
+        resetRuntime();
+        player = createPlayer(15.0F, 0);
+        weapon = (HandWeapon)player.getPrimaryHandItem();
+        IsoPlayer otherPlayer = new IsoPlayer();
+        otherPlayer.setHealth(2.0F);
+        setTarget(player, 5.0F, otherPlayer);
+        runAimingUpdate(player, 56.25F);
+        FirearmAimRuntime.captureShotStabilization(player, weapon);
+        FirearmAimRuntime.recordTargetedBodyPart(
+            player,
+            weapon,
+            otherPlayer,
+            RagdollBodyPart.BODYPART_HEAD.ordinal()
+        );
+        checkClose(
+            0.4F,
+            FirearmAimRuntime.guaranteeLethalHeadshotDamage(
+                otherPlayer,
+                weapon,
+                player,
+                false,
+                0.4F
+            ),
+            "players must not receive lethal headshot promotion"
+        );
+
+        resetRuntime();
+        player = createPlayer(15.0F, 0);
+        weapon = (HandWeapon)player.getPrimaryHandItem();
+        zombie = new IsoGameCharacter();
+        zombie.setZombie(true);
+        zombie.setHealth(3.5F);
+        setTarget(player, 5.0F, zombie);
+        runAimingUpdate(player, 28.125F);
+        FirearmAimRuntime.captureShotStabilization(player, weapon);
+        FirearmAimRuntime.recordTargetedBodyPart(
+            player,
+            weapon,
+            zombie,
+            RagdollBodyPart.BODYPART_HEAD.ordinal()
+        );
+        checkClose(
+            0.4F,
+            FirearmAimRuntime.guaranteeLethalHeadshotDamage(
+                zombie,
+                weapon,
+                player,
+                false,
+                0.4F
+            ),
+            "partial stabilization must not become lethal"
+        );
+
+        resetRuntime();
+        player = createPlayer(15.0F, 0);
+        weapon = (HandWeapon)player.getPrimaryHandItem();
+        zombie = new IsoGameCharacter();
+        zombie.setZombie(true);
+        zombie.setHealth(3.5F);
+        setTarget(player, 5.0F, zombie);
+        runAimingUpdate(player, 56.25F);
+        FirearmAimRuntime.captureShotStabilization(player, weapon);
+        FirearmAimRuntime.recordTargetedBodyPart(
+            player,
+            weapon,
+            zombie,
+            RagdollBodyPart.BODYPART_SPINE.ordinal()
+        );
+        checkClose(
+            0.4F,
+            FirearmAimRuntime.guaranteeLethalHeadshotDamage(
+                zombie,
+                weapon,
+                player,
+                false,
+                0.4F
+            ),
+            "rerouted failed-damage headshots must not become lethal"
+        );
+
+        FirearmAimRuntime.recordTargetedBodyPart(
+            player,
+            weapon,
+            zombie,
+            RagdollBodyPart.BODYPART_HEAD.ordinal()
+        );
+        checkClose(
+            0.4F,
+            FirearmAimRuntime.guaranteeLethalHeadshotDamage(
+                zombie,
+                weapon,
+                player,
+                true,
+                0.4F
+            ),
+            "ignored damage must not become lethal"
+        );
+        FirearmAimRuntime.endShot();
+    }
+
     private static void testAccuracyChangesAreScopedToValidTargets() {
         resetRuntime();
         IsoPlayer player = createPlayer(15.0F, 0);
@@ -480,6 +649,21 @@ public final class FirearmAimingPatchTest {
             "setAimingDelay"
         );
         assertPatchTarget(
+            FirearmAimingPatches.TargetedBodyPart.class,
+            "zombie.CombatManager",
+            "processTargetedHit"
+        );
+        assertPatchTarget(
+            FirearmAimingPatches.LethalHeadshot.class,
+            "zombie.characters.IsoGameCharacter",
+            "hitConsequences"
+        );
+        assertPatchTarget(
+            FirearmAimingPatches.ShotCleanup.class,
+            "zombie.CombatManager",
+            "attackCollisionCheck"
+        );
+        assertPatchTarget(
             FirearmAimingPatches.StabilizationHitChance.class,
             "zombie.CombatManager",
             "calculateHitInfoList"
@@ -549,6 +733,41 @@ public final class FirearmAimingPatchTest {
         assertThis(criticalEnter.getParameters()[0], "critical receiver");
         assertArgument(criticalEnter.getParameters()[1], 0, true, "critical target");
         assertThrowableExit(FirearmAimingPatches.CriticalChanceCalculationScope.class, "critical scope");
+        assertThrowableExit(FirearmAimingPatches.ShotCleanup.class, "shot scope");
+
+        Method shotEnter = FirearmAimingPatches.PostShotAimingDelay.class.getDeclaredMethod(
+            "enter",
+            IsoPlayer.class,
+            HandWeapon.class
+        );
+        assertArgument(shotEnter.getParameters()[0], 0, true, "shot player");
+        assertArgument(shotEnter.getParameters()[1], 1, true, "shot weapon");
+
+        Method bodyPartEnter = FirearmAimingPatches.TargetedBodyPart.class.getDeclaredMethod(
+            "enter",
+            HandWeapon.class,
+            IsoGameCharacter.class,
+            IsoGameCharacter.class,
+            RagdollBodyPart.class
+        );
+        assertArgument(bodyPartEnter.getParameters()[0], 0, true, "targeted weapon");
+        assertArgument(bodyPartEnter.getParameters()[1], 1, true, "targeted wielder");
+        assertArgument(bodyPartEnter.getParameters()[2], 2, true, "targeted character");
+        assertArgument(bodyPartEnter.getParameters()[3], 3, true, "targeted body part");
+
+        Method lethalEnter = FirearmAimingPatches.LethalHeadshot.class.getDeclaredMethod(
+            "enter",
+            IsoGameCharacter.class,
+            HandWeapon.class,
+            IsoGameCharacter.class,
+            boolean.class,
+            float.class
+        );
+        assertThis(lethalEnter.getParameters()[0], "lethal target");
+        assertArgument(lethalEnter.getParameters()[1], 0, true, "lethal weapon");
+        assertArgument(lethalEnter.getParameters()[2], 1, true, "lethal wielder");
+        assertArgument(lethalEnter.getParameters()[3], 2, true, "lethal ignore flag");
+        assertArgument(lethalEnter.getParameters()[4], 3, false, "lethal damage");
 
         Method distanceEnter = FirearmAimingPatches.DistanceModifier.class.getDeclaredMethod(
             "enter",
@@ -587,6 +806,9 @@ public final class FirearmAimingPatchTest {
         List<Class<?>> expected = List.of(
             FirearmAimingPatches.AimingDelayUpdate.class,
             FirearmAimingPatches.PostShotAimingDelay.class,
+            FirearmAimingPatches.TargetedBodyPart.class,
+            FirearmAimingPatches.LethalHeadshot.class,
+            FirearmAimingPatches.ShotCleanup.class,
             FirearmAimingPatches.StabilizationHitChance.class,
             FirearmAimingPatches.HitChanceCalculationScope.class,
             FirearmAimingPatches.CriticalChanceCalculationScope.class,
@@ -598,7 +820,7 @@ public final class FirearmAimingPatchTest {
             FirearmAimingPatches.MoodlesPenalty.class,
             FirearmAimingPatches.VisionPenalty.class
         );
-        check(discovered.size() == expected.size(), "ZombieBuddy must discover exactly twelve patches");
+        check(discovered.size() == expected.size(), "ZombieBuddy must discover every aiming patch");
         for (Class<?> patchClass : expected) {
             check(discovered.contains(patchClass), "ZombieBuddy missed " + patchClass.getName());
         }

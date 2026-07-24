@@ -32,8 +32,8 @@ acquisition time.
   crosshair throughout acquisition without over-rewarding a quick partial
   aim. Full stabilization still guarantees a damaging hit.
 - Project Zomboid's ballistics controller already records the body part under
-  the cursor. A damaging shot over the head uses vanilla's targeted head-shot
-  path.
+  the cursor. A fully stabilized damaging shot through its targeted head-shot
+  path kills zombies and animals. Players retain normal headshot damage.
 - Simple Bows works because its bows are aimed firearms and use the same live
   sight, maximum-range, skill, target, and stabilization calculations.
 
@@ -148,6 +148,15 @@ making the crosshair visibly tighten as the target lock matures. A promotion
 below complete progress is capped at 99, so only full stabilization—or a
 natural vanilla 100—receives the mod's guarantee.
 
+Full stabilization is captured when the shot starts, before recoil reopens the
+crosshair. If the successful hit then follows vanilla's explicit
+cursor-targeted head path, the final damage is raised to the target's remaining
+health for zombies and animals. The normal `Hit` and `hitConsequences` flow
+still handles damage, death animation, kill credit, XP, and other hooks.
+Random critical head reactions never enter this path. The Damage Chance fix
+reroutes failed-roll head targeting before this mod records the body part, so a
+reduced-damage graze cannot become lethal.
+
 Target identity comes from the primary `HitInfo` object's stable moving-object
 ID. Changing distance on the same zombie preserves absolute work; changing
 zombies applies the retention and minimum-reacquisition rules.
@@ -204,7 +213,10 @@ Enable `ZombieBuddy`, then `cjsFirearmAimingOverhaul`.
    and confirm invested work is retained.
 6. Fire after full stabilization and confirm recoil visibly reopens the
    crosshair, with Aiming skill reducing but not eliminating recovery.
-7. Confirm the crosshair tightens throughout acquisition, a fully stabilized
-   shot always damages the current primary target, and putting the cursor over
-   its head uses the targeted head-hit path.
-8. Repeat the range and target-change checks with a Simple Bows bow.
+7. Confirm the crosshair tightens throughout acquisition and a fully
+   stabilized shot always damages the current primary target.
+8. Fully stabilize with the cursor over a zombie's head and confirm the hit
+   kills it. Repeat against an animal, then confirm partial-lock headshots and
+   player headshots retain normal damage.
+9. Repeat the range, target-change, and lethal targeted-headshot checks with a
+   Simple Bows bow.

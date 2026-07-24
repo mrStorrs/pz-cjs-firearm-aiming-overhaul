@@ -1,0 +1,20 @@
+package zombie.core.physics;
+
+public enum RagdollBodyPart {
+    BODYPART_PELVIS,
+    BODYPART_SPINE,
+    BODYPART_HEAD,
+    BODYPART_LEFT_UPPER_LEG,
+    BODYPART_LEFT_LOWER_LEG,
+    BODYPART_RIGHT_UPPER_LEG,
+    BODYPART_RIGHT_LOWER_LEG,
+    BODYPART_LEFT_UPPER_ARM,
+    BODYPART_LEFT_LOWER_ARM,
+    BODYPART_RIGHT_UPPER_ARM,
+    BODYPART_RIGHT_LOWER_ARM,
+    BODYPART_COUNT;
+
+    public static boolean isHead(int value) {
+        return value == BODYPART_HEAD.ordinal();
+    }
+}

@@ -6,6 +6,7 @@ import java.util.WeakHashMap;
 import zombie.characters.IsoGameCharacter;
 import zombie.characters.IsoPlayer;
 import zombie.characters.skills.PerkFactory;
+import zombie.core.physics.RagdollBodyPart;
 import zombie.inventory.InventoryItem;
 import zombie.inventory.types.HandWeapon;
 import zombie.iso.IsoMovingObject;
@@ -37,6 +38,8 @@ public final class FirearmAimRuntime {
         Collections.synchronizedMap(new WeakHashMap<>());
     private static final ThreadLocal<AccuracyScope> ACCURACY_SCOPE =
         ThreadLocal.withInitial(AccuracyScope::new);
+    private static final ThreadLocal<ShotScope> SHOT_SCOPE =
+        ThreadLocal.withInitial(ShotScope::new);
 
     private FirearmAimRuntime() {
     }
@@ -83,6 +86,62 @@ public final class FirearmAimRuntime {
         state.completedWork = state.requiredWork * Math.min(vanillaCompletion, completionCeiling);
         state.updatePending = false;
         player.setAimingDelay(state.getEffectiveDelay());
+    }
+
+    public static void captureShotStabilization(IsoPlayer player, HandWeapon weapon) {
+        ShotScope scope = SHOT_SCOPE.get();
+        scope.reset();
+        scope.owner = player;
+        scope.weapon = weapon;
+        scope.fullyStabilized = weapon != null
+            && weapon.isAimedFirearm()
+            && weapon == getAimedFirearm(player)
+            && getStabilizationProgress(player) >= 1.0F;
+    }
+
+    public static void recordTargetedBodyPart(
+            IsoGameCharacter wielder,
+            HandWeapon weapon,
+            IsoGameCharacter target,
+            int bodyPart) {
+        ShotScope scope = SHOT_SCOPE.get();
+        if (!scope.fullyStabilized
+                || scope.owner != wielder
+                || scope.weapon != weapon
+                || target == null
+                || !RagdollBodyPart.isHead(bodyPart)) {
+            return;
+        }
+
+        scope.targetedHead = target;
+    }
+
+    public static float guaranteeLethalHeadshotDamage(
+            IsoGameCharacter target,
+            HandWeapon weapon,
+            IsoGameCharacter wielder,
+            boolean ignoreDamage,
+            float damage) {
+        ShotScope scope = SHOT_SCOPE.get();
+        boolean matchingTargetedHead = scope.fullyStabilized
+            && scope.owner == wielder
+            && scope.weapon == weapon
+            && scope.targetedHead == target
+            && target != null;
+        if (!matchingTargetedHead) {
+            return damage;
+        }
+
+        scope.targetedHead = null;
+        if (ignoreDamage || (!target.isZombie() && !target.isAnimal())) {
+            return damage;
+        }
+
+        return Math.max(damage, target.getHealth());
+    }
+
+    public static void endShot() {
+        SHOT_SCOPE.remove();
     }
 
     public static void promoteStabilizationHitChance(IsoGameCharacter character) {
@@ -299,6 +358,7 @@ public final class FirearmAimRuntime {
     static void resetForTest() {
         AIM_STATES.clear();
         ACCURACY_SCOPE.remove();
+        SHOT_SCOPE.remove();
     }
 
     private static AimState getOrCreateState(IsoGameCharacter character, HandWeapon weapon) {
@@ -539,6 +599,20 @@ public final class FirearmAimRuntime {
             this.convertPenalties = false;
             this.targetDistance = Float.MAX_VALUE;
             this.recoverablePenalty = 0.0F;
+        }
+    }
+
+    private static final class ShotScope {
+        private IsoGameCharacter owner;
+        private HandWeapon weapon;
+        private IsoGameCharacter targetedHead;
+        private boolean fullyStabilized;
+
+        private void reset() {
+            this.owner = null;
+            this.weapon = null;
+            this.targetedHead = null;
+            this.fullyStabilized = false;
         }
     }
 

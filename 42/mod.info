@@ -1,9 +1,9 @@
 name=CJS Firearm Aiming Overhaul
 id=cjsFirearmAimingOverhaul
-description=Adds skill-scaled acquisition, normalized far aiming, target reacquisition, and guaranteed full-lock hits.
+description=Adds skill-scaled acquisition, normalized far aiming, guaranteed full-lock hits, and lethal targeted headshots.
 poster=poster.png
 author=CJ Storrs
-modversion=1.7.0
+modversion=1.8.0
 versionMin=42.19.0
 require=\ZombieBuddy
 javaJarFile=media/java/CJSFirearmAimingOverhaul.jar

@@ -11,6 +11,9 @@ public class IsoGameCharacter extends IsoMovingObject {
     private boolean aiming;
     private float aimingDelay;
     private int aimingLevel;
+    private float health = 1.0F;
+    private boolean zombie;
+    private boolean animal;
     private final PZArrayList<HitInfo> hitInfoList = new PZArrayList<>();
 
     public InventoryItem getPrimaryHandItem() {
@@ -47,5 +50,29 @@ public class IsoGameCharacter extends IsoMovingObject {
 
     public void setAimingLevel(int aimingLevel) {
         this.aimingLevel = aimingLevel;
+    }
+
+    public float getHealth() {
+        return this.health;
+    }
+
+    public void setHealth(float health) {
+        this.health = health;
+    }
+
+    public boolean isZombie() {
+        return this.zombie;
+    }
+
+    public void setZombie(boolean zombie) {
+        this.zombie = zombie;
+    }
+
+    public boolean isAnimal() {
+        return this.animal;
+    }
+
+    public void setAnimal(boolean animal) {
+        this.animal = animal;
     }
 }

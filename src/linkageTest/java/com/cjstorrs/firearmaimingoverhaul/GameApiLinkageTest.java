@@ -17,6 +17,10 @@ public final class GameApiLinkageTest {
         Class<?> hitInfo = load(loader, "zombie.network.fields.hit.HitInfo");
         Class<?> isoMovingObject = load(loader, "zombie.iso.IsoMovingObject");
         Class<?> ballisticsController = load(loader, "zombie.core.physics.BallisticsController");
+        Class<?> ragdollBodyPart = load(loader, "zombie.core.physics.RagdollBodyPart");
+        Class<?> shotDirection = load(loader, "zombie.combat.ShotDirection");
+        Class<?> swipeStatePlayer = load(loader, "zombie.ai.states.SwipeStatePlayer");
+        Class<?> attackType = load(loader, "zombie.AttackType");
         Class<?> isoGridSquare = load(loader, "zombie.iso.IsoGridSquare");
         Class<?> pzArrayList = load(loader, "zombie.util.list.PZArrayList");
 
@@ -25,6 +29,9 @@ public final class GameApiLinkageTest {
         requireMethod(isoGameCharacter, "setAimingDelay", float.class);
         check(requireMethod(isoGameCharacter, "getHitInfoList").getReturnType() == pzArrayList, "hit-info list return type");
         requireMethod(isoGameCharacter, "isAiming");
+        check(requireMethod(isoGameCharacter, "getHealth").getReturnType() == float.class, "health return type");
+        check(requireMethod(isoGameCharacter, "isZombie").getReturnType() == boolean.class, "zombie flag return type");
+        check(requireMethod(isoGameCharacter, "isAnimal").getReturnType() == boolean.class, "animal flag return type");
         requireMethod(isoGameCharacter, "getPrimaryHandItem");
         check(
             requireMethod(isoGameCharacter, "getPerkLevel", perk).getReturnType() == int.class,
@@ -45,6 +52,32 @@ public final class GameApiLinkageTest {
         );
 
         requireMethod(combatManager, "setAimingDelay", isoPlayer, handWeapon);
+        requireMethod(
+            combatManager,
+            "processTargetedHit",
+            handWeapon,
+            isoGameCharacter,
+            isoGameCharacter,
+            ragdollBodyPart,
+            shotDirection
+        );
+        requireMethod(
+            combatManager,
+            "attackCollisionCheck",
+            isoGameCharacter,
+            handWeapon,
+            swipeStatePlayer,
+            attackType
+        );
+        requireMethod(
+            isoGameCharacter,
+            "hitConsequences",
+            handWeapon,
+            isoGameCharacter,
+            boolean.class,
+            float.class,
+            boolean.class
+        );
         requireMethod(combatManager, "calculateHitInfoList", isoGameCharacter);
         requireMethod(combatManager, "calculateHitChanceData", isoGameCharacter, handWeapon, hitInfo);
         check(
@@ -115,6 +148,25 @@ public final class GameApiLinkageTest {
         requireMethod(runtime, "beforeAimingDelayUpdate", isoGameCharacter);
         requireMethod(runtime, "afterAimingDelayUpdate", isoGameCharacter);
         requireMethod(runtime, "synchronizePostShotDelay", isoPlayer);
+        requireMethod(runtime, "captureShotStabilization", isoPlayer, handWeapon);
+        requireMethod(
+            runtime,
+            "recordTargetedBodyPart",
+            isoGameCharacter,
+            handWeapon,
+            isoGameCharacter,
+            int.class
+        );
+        requireMethod(
+            runtime,
+            "guaranteeLethalHeadshotDamage",
+            isoGameCharacter,
+            handWeapon,
+            isoGameCharacter,
+            boolean.class,
+            float.class
+        );
+        requireMethod(runtime, "endShot");
         requireMethod(runtime, "promoteStabilizationHitChance", isoGameCharacter);
         requireMethod(runtime, "beginAccuracyCalculation", isoGameCharacter, handWeapon, hitInfo);
         requireMethod(runtime, "beginCriticalChanceCalculation", isoPlayer, isoGameCharacter);

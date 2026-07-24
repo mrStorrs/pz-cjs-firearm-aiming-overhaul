@@ -1,0 +1,7 @@
+{
+  "Sandbox_CJSFirearmAimingOverhaul": "CJS Firearm Aiming Overhaul",
+  "Sandbox_CJSFirearmAimingOverhaul_MaximumAimTimeMultiplier": "Maximum Aim Time Multiplier",
+  "Sandbox_CJSFirearmAimingOverhaul_MaximumAimTimeMultiplier_tooltip": "Aim-time multiplier at the firearm's physical maximum range. Effective-sight range remains at normal speed. Default: 4.0.",
+  "Sandbox_CJSFirearmAimingOverhaul_CurveExponent": "Aim-Time Curve",
+  "Sandbox_CJSFirearmAimingOverhaul_CurveExponent_tooltip": "Controls how quickly extra aim time ramps up beyond effective-sight range. Higher values keep the increase gentler near sight range and steeper near maximum range. Default: 1.5."
+}

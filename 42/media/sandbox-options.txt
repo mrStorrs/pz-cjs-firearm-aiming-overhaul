@@ -1,0 +1,21 @@
+VERSION = 1,
+
+option CJSFirearmAimingOverhaul.MaximumAimTimeMultiplier
+{
+    type = double,
+    min = 1.0,
+    max = 10.0,
+    default = 4.0,
+    page = CJSFirearmAimingOverhaul,
+    translation = CJSFirearmAimingOverhaul_MaximumAimTimeMultiplier,
+}
+
+option CJSFirearmAimingOverhaul.CurveExponent
+{
+    type = double,
+    min = 0.5,
+    max = 3.0,
+    default = 1.5,
+    page = CJSFirearmAimingOverhaul,
+    translation = CJSFirearmAimingOverhaul_CurveExponent,
+}

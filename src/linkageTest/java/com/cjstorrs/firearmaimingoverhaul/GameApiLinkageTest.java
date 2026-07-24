@@ -1,0 +1,89 @@
+package com.cjstorrs.firearmaimingoverhaul;
+
+import java.lang.reflect.Method;
+
+public final class GameApiLinkageTest {
+    private GameApiLinkageTest() {
+    }
+
+    public static void main(String[] args) throws ReflectiveOperationException {
+        ClassLoader loader = GameApiLinkageTest.class.getClassLoader();
+        Class<?> combatManager = load(loader, "zombie.CombatManager");
+        Class<?> isoGameCharacter = load(loader, "zombie.characters.IsoGameCharacter");
+        Class<?> isoPlayer = load(loader, "zombie.characters.IsoPlayer");
+        Class<?> handWeapon = load(loader, "zombie.inventory.types.HandWeapon");
+        Class<?> hitInfo = load(loader, "zombie.network.fields.hit.HitInfo");
+        Class<?> pzArrayList = load(loader, "zombie.util.list.PZArrayList");
+
+        requireMethod(isoGameCharacter, "updateAimingDelay");
+        check(requireMethod(isoGameCharacter, "getAimingDelay").getReturnType() == float.class, "aiming delay return type");
+        requireMethod(isoGameCharacter, "setAimingDelay", float.class);
+        check(requireMethod(isoGameCharacter, "getHitInfoList").getReturnType() == pzArrayList, "hit-info list return type");
+        requireMethod(isoGameCharacter, "isAiming");
+        requireMethod(isoGameCharacter, "getPrimaryHandItem");
+
+        requireMethod(combatManager, "setAimingDelay", isoPlayer, handWeapon);
+        requireMethod(combatManager, "calculateHitChanceData", isoGameCharacter, handWeapon, hitInfo);
+        check(
+            requireMethod(combatManager, "getDistanceModifier", float.class, float.class, float.class, boolean.class)
+                .getReturnType() == float.class,
+            "distance modifier return type"
+        );
+        check(
+            requireMethod(combatManager, "getAimDelayPenalty", float.class, float.class, float.class, float.class)
+                .getReturnType() == float.class,
+            "aim-delay penalty return type"
+        );
+
+        check(requireMethod(handWeapon, "isAimedFirearm").getReturnType() == boolean.class, "aimed-firearm return type");
+        check(requireMethod(handWeapon, "getAimingTime").getReturnType() == int.class, "aiming-time return type");
+        check(
+            requireMethod(handWeapon, "getMaxSightRange", isoGameCharacter).getReturnType() == float.class,
+            "maximum sight range return type"
+        );
+        check(
+            requireMethod(handWeapon, "getMaxRange", isoGameCharacter).getReturnType() == float.class,
+            "maximum range return type"
+        );
+        check(
+            requireMethod(handWeapon, "getRangeMod", isoGameCharacter).getReturnType() == float.class,
+            "range modifier return type"
+        );
+        hitInfo.getField("distSq");
+
+        Class<?> sandboxOptions = load(loader, "zombie.SandboxOptions");
+        Class<?> sandboxOption = load(loader, "zombie.SandboxOptions$SandboxOption");
+        Class<?> doubleSandboxOption = load(loader, "zombie.SandboxOptions$DoubleSandboxOption");
+        check(
+            requireMethod(sandboxOptions, "getOptionByName", String.class).getReturnType() == sandboxOption,
+            "sandbox option return type"
+        );
+        check(doubleSandboxOption.getMethod("getValue").getReturnType() == double.class, "double sandbox value type");
+
+        Class<?> runtime = load(loader, "com.cjstorrs.firearmaimingoverhaul.FirearmAimRuntime");
+        requireMethod(runtime, "beforeAimingDelayUpdate", isoGameCharacter);
+        requireMethod(runtime, "afterAimingDelayUpdate", isoGameCharacter);
+        requireMethod(runtime, "synchronizePostShotDelay", isoPlayer);
+        requireMethod(runtime, "beginAccuracyCalculation", isoGameCharacter, handWeapon);
+        requireMethod(runtime, "endAccuracyCalculation");
+        requireMethod(runtime, "removeBeyondSightDistancePenalty", float.class, float.class, float.class);
+        requireMethod(runtime, "removeBeyondSightDelayScaling", float.class, float.class, float.class);
+
+        System.out.println("GameApiLinkageTest: PASS");
+    }
+
+    private static Class<?> load(ClassLoader loader, String className) throws ClassNotFoundException {
+        return Class.forName(className, false, loader);
+    }
+
+    private static Method requireMethod(Class<?> owner, String name, Class<?>... parameters)
+            throws NoSuchMethodException {
+        return owner.getDeclaredMethod(name, parameters);
+    }
+
+    private static void check(boolean condition, String message) {
+        if (!condition) {
+            throw new AssertionError(message);
+        }
+    }
+}

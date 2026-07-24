@@ -11,8 +11,11 @@ public final class GameApiLinkageTest {
         Class<?> combatManager = load(loader, "zombie.CombatManager");
         Class<?> isoGameCharacter = load(loader, "zombie.characters.IsoGameCharacter");
         Class<?> isoPlayer = load(loader, "zombie.characters.IsoPlayer");
+        Class<?> perk = load(loader, "zombie.characters.skills.PerkFactory$Perk");
+        Class<?> perks = load(loader, "zombie.characters.skills.PerkFactory$Perks");
         Class<?> handWeapon = load(loader, "zombie.inventory.types.HandWeapon");
         Class<?> hitInfo = load(loader, "zombie.network.fields.hit.HitInfo");
+        Class<?> isoMovingObject = load(loader, "zombie.iso.IsoMovingObject");
         Class<?> ballisticsController = load(loader, "zombie.core.physics.BallisticsController");
         Class<?> isoGridSquare = load(loader, "zombie.iso.IsoGridSquare");
         Class<?> pzArrayList = load(loader, "zombie.util.list.PZArrayList");
@@ -23,6 +26,11 @@ public final class GameApiLinkageTest {
         check(requireMethod(isoGameCharacter, "getHitInfoList").getReturnType() == pzArrayList, "hit-info list return type");
         requireMethod(isoGameCharacter, "isAiming");
         requireMethod(isoGameCharacter, "getPrimaryHandItem");
+        check(
+            requireMethod(isoGameCharacter, "getPerkLevel", perk).getReturnType() == int.class,
+            "perk level return type"
+        );
+        check(perks.getField("Aiming").getType() == perk, "aiming perk field type");
         check(
             requireMethod(isoGameCharacter, "getBallisticsController").getReturnType() == ballisticsController,
             "ballistics-controller return type"
@@ -83,6 +91,8 @@ public final class GameApiLinkageTest {
         );
         hitInfo.getField("distSq");
         check(hitInfo.getField("chance").getType() == int.class, "hit chance field type");
+        check(requireMethod(hitInfo, "getObject").getReturnType() == isoMovingObject, "hit object return type");
+        check(requireMethod(isoMovingObject, "getID").getReturnType() == int.class, "object id return type");
         check(
             requireMethod(ballisticsController, "isCameraTarget", int.class).getReturnType() == boolean.class,
             "camera-target return type"
@@ -106,12 +116,12 @@ public final class GameApiLinkageTest {
         requireMethod(runtime, "afterAimingDelayUpdate", isoGameCharacter);
         requireMethod(runtime, "synchronizePostShotDelay", isoPlayer);
         requireMethod(runtime, "guaranteeFullyStabilizedHit", isoGameCharacter);
-        requireMethod(runtime, "beginAccuracyCalculation", isoGameCharacter, handWeapon);
-        requireMethod(runtime, "beginCriticalChanceCalculation", isoPlayer);
+        requireMethod(runtime, "beginAccuracyCalculation", isoGameCharacter, handWeapon, hitInfo);
+        requireMethod(runtime, "beginCriticalChanceCalculation", isoPlayer, isoGameCharacter);
         requireMethod(runtime, "endAccuracyCalculation");
-        requireMethod(runtime, "normalizeBeyondSightAccuracyDistance", float.class, float.class, float.class);
-        requireMethod(runtime, "convertBeyondSightPermanentPenalty", float.class);
-        requireMethod(runtime, "convertBeyondSightVisionModifier", float.class);
+        requireMethod(runtime, "prepareAccuracyDistance", float.class, float.class, float.class);
+        requireMethod(runtime, "convertRecoverablePenalty", float.class);
+        requireMethod(runtime, "convertRecoverableVisionModifier", float.class);
         requireMethod(runtime, "removeBeyondSightDelayScaling", float.class, float.class, float.class);
 
         System.out.println("GameApiLinkageTest: PASS");

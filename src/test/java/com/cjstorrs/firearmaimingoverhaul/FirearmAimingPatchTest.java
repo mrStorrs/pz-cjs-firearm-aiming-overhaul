@@ -9,6 +9,7 @@ import zombie.SandboxOptions;
 import zombie.characters.IsoGameCharacter;
 import zombie.characters.IsoPlayer;
 import zombie.inventory.types.HandWeapon;
+import zombie.iso.IsoMovingObject;
 import zombie.network.fields.hit.HitInfo;
 
 public final class FirearmAimingPatchTest {
@@ -16,431 +17,402 @@ public final class FirearmAimingPatchTest {
     }
 
     public static void main(String[] args) throws ReflectiveOperationException {
-        testCurveDefaultsAndConfiguration();
-        testAbsoluteDistanceIgnoresSightToMaximumGap();
-        testTinySightToMaximumGapGetsSmallPenalty();
-        testExcessSightRangeSpeedsTargetAcquisition();
-        testClosestTargetControlsAimTime();
-        testInsideSightRangeMatchesVanilla();
-        testMaximumRangeTakesFourTimesAsLong();
-        testMovingFartherReopensStabilization();
-        testMovingCloserRetainsAccumulatedWork();
-        testPostShotRecoveryUsesDistanceScaling();
-        testAccuracyChangesAreScopedToFirearms();
-        testBeyondSightPenaltiesBecomeAdditionalAimTime();
+        testHybridCurveDefaultsAndConfiguration();
+        testHybridCurveNormalizesWeaponGap();
+        testSkillScaledMinimumLockTime();
+        testFarAimAddsSecondsInsteadOfMultiplyingTinyTimers();
+        testExcessSightBonusIsCapped();
+        testConditionsBecomeAimTimeAtEveryRange();
+        testTargetChangesRequireReacquisition();
+        testDistanceChangesOnSameTargetPreserveWork();
+        testRecoilReopensMinimumSpread();
         testFullyStabilizedTargetIsGuaranteedToTakeDamage();
+        testAccuracyChangesAreScopedToValidTargets();
         testPatchMetadata();
         testZombieBuddyDiscovery();
         System.out.println("FirearmAimingPatchTest: PASS");
     }
 
-    private static void testCurveDefaultsAndConfiguration() {
-        resetOptions();
-        IsoPlayer player = createPlayer(10.0F);
-        HandWeapon weapon = (HandWeapon)player.getPrimaryHandItem();
-
-        setTargetDistance(player, 6.0F);
-        checkClose(1.0F, FirearmAimRuntime.calculateAimTimeMultiplier(player, weapon), "sight range");
-
-        setTargetDistance(player, 10.0F);
-        checkClose(1.7589F, FirearmAimRuntime.calculateAimTimeMultiplier(player, weapon), "four tiles beyond sight");
-
-        setTargetDistance(player, 15.0F);
-        checkClose(3.5614F, FirearmAimRuntime.calculateAimTimeMultiplier(player, weapon), "nine tiles beyond sight");
-
-        setTargetDistance(player, 20.0F);
-        checkClose(4.0F, FirearmAimRuntime.calculateAimTimeMultiplier(player, weapon), "maximum range");
+    private static void testHybridCurveDefaultsAndConfiguration() {
+        resetRuntime();
+        checkClose(
+            5.0F,
+            FirearmAimSettings.getMaximumFarExtraSeconds(),
+            "default maximum far extra seconds"
+        );
+        checkClose(
+            1.25F,
+            FirearmAimSettings.getFarProgressExponent(),
+            "default far progress exponent"
+        );
+        checkClose(
+            10.0F,
+            FirearmAimSettings.getReferenceGapTiles(),
+            "default reference gap"
+        );
 
         SandboxOptions.instance.setOptionForTest(
             "CJSFirearmAimingOverhaul.MaximumAimTimeMultiplier",
             new SandboxOptions.DoubleSandboxOption(6.0)
         );
-        checkClose(6.0F, FirearmAimSettings.getMaximumMultiplier(), "configured maximum multiplier");
+        SandboxOptions.instance.setOptionForTest(
+            "CJSFirearmAimingOverhaul.CurveExponent",
+            new SandboxOptions.DoubleSandboxOption(2.0)
+        );
         SandboxOptions.instance.setOptionForTest(
             "CJSFirearmAimingOverhaul.FullPenaltyDistanceTiles",
             new SandboxOptions.DoubleSandboxOption(5.0)
         );
-        checkClose(5.0F, FirearmAimSettings.getFullPenaltyDistanceTiles(), "configured full-penalty distance");
-        resetOptions();
+        checkClose(6.0F, FirearmAimSettings.getMaximumFarExtraSeconds(), "configured far seconds");
+        checkClose(2.0F, FirearmAimSettings.getFarProgressExponent(), "configured exponent");
+        checkClose(5.0F, FirearmAimSettings.getReferenceGapTiles(), "configured reference gap");
     }
 
-    private static void testAbsoluteDistanceIgnoresSightToMaximumGap() {
+    private static void testHybridCurveNormalizesWeaponGap() {
         resetRuntime();
-        IsoPlayer player = createPlayer(10.0F);
+
+        checkClose(
+            3.8778F,
+            FirearmAimRuntime.calculateFarAimSeconds(0, 11.0F, 6.0F, 16.0F),
+            "halfway through a ten-tile gap"
+        );
+        checkClose(
+            3.8778F,
+            FirearmAimRuntime.calculateFarAimSeconds(0, 16.0F, 6.0F, 26.0F),
+            "halfway through a twenty-tile rifle gap"
+        );
+        checkClose(
+            4.0451F,
+            FirearmAimRuntime.calculateFarAimSeconds(0, 8.0F, 6.0F, 8.0F),
+            "maximum of a two-tile gap"
+        );
+        checkClose(
+            7.5F,
+            FirearmAimRuntime.calculateFarAimSeconds(0, 16.0F, 6.0F, 16.0F),
+            "maximum of a ten-tile gap at aiming zero"
+        );
+        checkClose(
+            4.8F,
+            FirearmAimRuntime.calculateFarAimSeconds(10, 16.0F, 6.0F, 16.0F),
+            "maximum of a ten-tile gap at aiming ten"
+        );
+    }
+
+    private static void testSkillScaledMinimumLockTime() {
+        resetRuntime();
+        checkClose(1.5F, FirearmAimRuntime.calculateMinimumLockSeconds(0), "aiming zero floor");
+        checkClose(1.1F, FirearmAimRuntime.calculateMinimumLockSeconds(5), "aiming five floor");
+        checkClose(0.7F, FirearmAimRuntime.calculateMinimumLockSeconds(10), "aiming ten floor");
+
+        IsoPlayer player = createPlayer(15.0F, 0);
         HandWeapon weapon = (HandWeapon)player.getPrimaryHandItem();
-        setTargetDistance(player, 8.0F);
-        float wideGapMultiplier = FirearmAimRuntime.calculateAimTimeMultiplier(player, weapon);
-
-        weapon.setMaxSightRange(19.0F);
-        weapon.setMaxRange(25.0F);
-        setTargetDistance(player, 21.0F);
-        float narrowGapMultiplier = FirearmAimRuntime.calculateAimTimeMultiplier(player, weapon);
-
-        weapon.setMaxSightRange(8.0F);
-        weapon.setMaxRange(27.5F);
-        setTargetDistance(player, 10.0F);
-        float skillAdjustedMultiplier = FirearmAimRuntime.calculateAimTimeMultiplier(player, weapon);
-
-        checkClose(1.2683F, wideGapMultiplier, "two tiles beyond sight with a wide gap");
+        setTarget(player, 5.0F, new IsoMovingObject(1));
         checkClose(
-            wideGapMultiplier,
-            narrowGapMultiplier,
-            "the same absolute distance beyond sight must have the same multiplier"
+            56.25F,
+            FirearmAimRuntime.calculateRequiredAimWork(player, weapon),
+            "fast pistol work floor at aiming zero"
         );
+
+        resetRuntime();
+        player = createPlayer(15.0F, 10);
+        weapon = (HandWeapon)player.getPrimaryHandItem();
+        setTarget(player, 5.0F, new IsoMovingObject(1));
         checkClose(
-            wideGapMultiplier,
-            skillAdjustedMultiplier,
-            "skill-adjusted sight and maximum ranges must still use absolute over-sight distance"
+            39.375F,
+            FirearmAimRuntime.calculateRequiredAimWork(player, weapon),
+            "fast pistol work floor at aiming ten"
+        );
+
+        resetRuntime();
+        player = createPlayer(75.0F, 10);
+        weapon = (HandWeapon)player.getPrimaryHandItem();
+        weapon.setAimingTime(75);
+        setTarget(player, 5.0F, new IsoMovingObject(1));
+        checkClose(
+            75.0F,
+            FirearmAimRuntime.calculateRequiredAimWork(player, weapon),
+            "a slower weapon keeps its longer vanilla time"
         );
     }
 
-    private static void testTinySightToMaximumGapGetsSmallPenalty() {
+    private static void testFarAimAddsSecondsInsteadOfMultiplyingTinyTimers() {
         resetRuntime();
-        IsoPlayer player = createPlayer(10.0F);
+        IsoPlayer player = createPlayer(15.0F, 0);
         HandWeapon weapon = (HandWeapon)player.getPrimaryHandItem();
-        weapon.setMaxSightRange(19.0F);
-        weapon.setMaxRange(20.0F);
-        setTargetDistance(player, 20.0F);
+        weapon.setMaxRange(16.0F);
+        setTarget(player, 16.0F, new IsoMovingObject(1));
 
         checkClose(
-            1.0949F,
-            FirearmAimRuntime.calculateAimTimeMultiplier(player, weapon),
-            "one-tile sight-to-maximum gap"
+            337.5F,
+            FirearmAimRuntime.calculateRequiredAimWork(player, weapon),
+            "aiming-zero maximum-range work"
+        );
+        runAimingUpdate(player, 56.25F);
+        check(player.getAimingDelay() > 0.0F, "inside-range floor alone must not finish far aim");
+        runAimingUpdate(player, 281.25F);
+        checkClose(0.0F, player.getAimingDelay(), "maximum-range aim must eventually finish");
+
+        resetRuntime();
+        player = createPlayer(15.0F, 10);
+        weapon = (HandWeapon)player.getPrimaryHandItem();
+        weapon.setMaxRange(16.0F);
+        setTarget(player, 16.0F, new IsoMovingObject(1));
+        checkClose(
+            309.375F,
+            FirearmAimRuntime.calculateRequiredAimWork(player, weapon),
+            "aiming-ten maximum-range work"
         );
     }
 
-    private static void testExcessSightRangeSpeedsTargetAcquisition() {
+    private static void testExcessSightBonusIsCapped() {
         resetRuntime();
-        IsoPlayer player = createPlayer(10.0F);
-        HandWeapon weapon = (HandWeapon)player.getPrimaryHandItem();
-        weapon.setMaxRange(10.0F);
-        setTargetDistance(player, 8.0F);
-
-        weapon.setMaxSightRange(10.0F);
         checkClose(
-            1.0F,
-            FirearmAimRuntime.calculateAimTimeMultiplier(player, weapon),
-            "sight equal to physical range"
-        );
-
-        weapon.setMaxSightRange(11.0F);
-        checkClose(
-            0.9134F,
-            FirearmAimRuntime.calculateAimTimeMultiplier(player, weapon),
-            "one excess sight tile must provide a modest acquisition bonus"
-        );
-
-        weapon.setMaxSightRange(20.0F);
-        checkClose(
-            0.25F,
-            FirearmAimRuntime.calculateAimTimeMultiplier(player, weapon),
-            "ten excess sight tiles must reach the reciprocal maximum bonus"
-        );
-
-        for (int i = 0; i < 2; i++) {
-            runAimingUpdate(player, 1.0F);
-        }
-        check(player.getAimingDelay() > 0.0F, "maximum sight surplus must not stabilize before enough work");
-        runAimingUpdate(player, 1.0F);
-        checkClose(0.0F, player.getAimingDelay(), "maximum sight surplus must acquire in one quarter normal time");
-    }
-
-    private static void testClosestTargetControlsAimTime() {
-        resetRuntime();
-        IsoPlayer player = createPlayer(10.0F);
-        HandWeapon weapon = (HandWeapon)player.getPrimaryHandItem();
-        setTargetDistance(player, 20.0F);
-        player.getHitInfoList().add(new HitInfo(100.0F));
-
-        checkClose(
-            1.7589F,
-            FirearmAimRuntime.calculateAimTimeMultiplier(player, weapon),
-            "the closest target shown by the reticle must control aim time"
-        );
-
-        FirearmAimRuntime.beginAccuracyCalculation(player, weapon);
-        FirearmAimRuntime.normalizeBeyondSightAccuracyDistance(20.0F, 2.0F, 6.0F);
-        FirearmAimRuntime.convertBeyondSightPermanentPenalty(50.0F);
-        FirearmAimRuntime.endAccuracyCalculation();
-        FirearmAimRuntime.beginAccuracyCalculation(player, weapon);
-        FirearmAimRuntime.normalizeBeyondSightAccuracyDistance(10.0F, 2.0F, 6.0F);
-        FirearmAimRuntime.convertBeyondSightPermanentPenalty(10.0F);
-        FirearmAimRuntime.endAccuracyCalculation();
-        runAimingUpdate(player, 0.0F);
-
-        checkClose(
-            2.7589F,
-            FirearmAimRuntime.calculateAimTimeMultiplier(player, weapon),
-            "the closest target's recoverable penalties must control aim time"
-        );
-    }
-
-    private static void testInsideSightRangeMatchesVanilla() {
-        resetRuntime();
-        IsoPlayer player = createPlayer(10.0F);
-        setTargetDistance(player, 5.0F);
-
-        runAimingUpdate(player, 1.0F);
-        checkClose(9.0F, player.getAimingDelay(), "inside sight range must keep vanilla countdown");
-
-        runAimingUpdate(player, 1.0F);
-        checkClose(8.0F, player.getAimingDelay(), "inside sight range must remain exact");
-    }
-
-    private static void testMaximumRangeTakesFourTimesAsLong() {
-        resetRuntime();
-        IsoPlayer player = createPlayer(10.0F);
-        setTargetDistance(player, 20.0F);
-
-        for (int i = 0; i < 10; i++) {
-            runAimingUpdate(player, 1.0F);
-        }
-
-        checkClose(7.5F, player.getAimingDelay(), "ten vanilla work units must be one quarter stabilized at maximum range");
-
-        for (int i = 0; i < 30; i++) {
-            runAimingUpdate(player, 1.0F);
-        }
-
-        checkClose(0.0F, player.getAimingDelay(), "maximum range must fully stabilize after forty work units");
-    }
-
-    private static void testMovingFartherReopensStabilization() {
-        resetRuntime();
-        IsoPlayer player = createPlayer(10.0F);
-        setTargetDistance(player, 5.0F);
-
-        for (int i = 0; i < 10; i++) {
-            runAimingUpdate(player, 1.0F);
-        }
-        checkClose(0.0F, player.getAimingDelay(), "close target should fully stabilize");
-
-        setTargetDistance(player, 20.0F);
-        FirearmAimRuntime.beforeAimingDelayUpdate(player);
-        FirearmAimRuntime.afterAimingDelayUpdate(player);
-        checkClose(7.5F, player.getAimingDelay(), "moving to maximum range must reopen stabilization");
-    }
-
-    private static void testMovingCloserRetainsAccumulatedWork() {
-        resetRuntime();
-        IsoPlayer player = createPlayer(10.0F);
-        setTargetDistance(player, 20.0F);
-
-        for (int i = 0; i < 20; i++) {
-            runAimingUpdate(player, 1.0F);
-        }
-        checkClose(5.0F, player.getAimingDelay(), "far target should be half stabilized");
-
-        setTargetDistance(player, 5.0F);
-        runAimingUpdate(player, 0.0F);
-        checkClose(0.0F, player.getAimingDelay(), "moving closer may use accumulated stabilization");
-
-        setTargetDistance(player, 20.0F);
-        FirearmAimRuntime.beforeAimingDelayUpdate(player);
-        FirearmAimRuntime.afterAimingDelayUpdate(player);
-        checkClose(5.0F, player.getAimingDelay(), "moving close must not erase accumulated far-range work");
-    }
-
-    private static void testPostShotRecoveryUsesDistanceScaling() {
-        resetRuntime();
-        IsoPlayer player = createPlayer(10.0F);
-        setTargetDistance(player, 20.0F);
-
-        for (int i = 0; i < 40; i++) {
-            runAimingUpdate(player, 1.0F);
-        }
-
-        player.setAimingDelay(5.0F);
-        FirearmAimRuntime.synchronizePostShotDelay(player);
-        for (int i = 0; i < 19; i++) {
-            runAimingUpdate(player, 1.0F);
-        }
-        check(player.getAimingDelay() > 0.0F, "far post-shot recovery must still be stabilizing before four-times duration");
-
-        runAimingUpdate(player, 1.0F);
-        checkClose(0.0F, player.getAimingDelay(), "far post-shot recovery must finish after scaled duration");
-    }
-
-    private static void testAccuracyChangesAreScopedToFirearms() {
-        resetRuntime();
-        IsoPlayer player = createPlayer(10.0F);
-        HandWeapon firearm = (HandWeapon)player.getPrimaryHandItem();
-        HandWeapon nonFirearm = createWeapon(false);
-
-        FirearmAimRuntime.beginAccuracyCalculation(player, nonFirearm);
-        checkClose(
-            10.0F,
-            FirearmAimRuntime.normalizeBeyondSightAccuracyDistance(10.0F, 2.0F, 6.0F),
-            "non-firearm accuracy distance"
-        );
-        FirearmAimRuntime.endAccuracyCalculation();
-
-        FirearmAimRuntime.beginCriticalChanceCalculation(player);
-        checkClose(
-            4.0F,
-            FirearmAimRuntime.normalizeBeyondSightAccuracyDistance(10.0F, 2.0F, 6.0F),
-            "critical-chance accuracy must share firearm normalization"
-        );
-        FirearmAimRuntime.endAccuracyCalculation();
-
-        FirearmAimRuntime.beginAccuracyCalculation(player, firearm);
-        checkClose(
-            5.0F,
-            FirearmAimRuntime.normalizeBeyondSightAccuracyDistance(5.0F, 2.0F, 6.0F),
-            "inside-sight accuracy distance"
-        );
-        checkClose(
-            4.0F,
-            FirearmAimRuntime.normalizeBeyondSightAccuracyDistance(10.0F, 2.0F, 6.0F),
-            "beyond-sight accuracy must use the optimal sight-band midpoint"
-        );
-        checkClose(
-            8.0F,
-            FirearmAimRuntime.removeBeyondSightDelayScaling(10.0F, 6.0F, 11.2F),
-            "beyond-sight delay scaling"
-        );
-        checkClose(
-            21.0F,
-            FirearmAimRuntime.normalizeBeyondSightAccuracyDistance(21.0F, 2.0F, 6.0F),
-            "beyond-physical-range accuracy distance"
-        );
-        FirearmAimRuntime.endAccuracyCalculation();
-    }
-
-    private static void testBeyondSightPenaltiesBecomeAdditionalAimTime() {
-        resetRuntime();
-        IsoPlayer player = createPlayer(10.0F);
-        HandWeapon firearm = (HandWeapon)player.getPrimaryHandItem();
-        setTargetDistance(player, 20.0F);
-
-        FirearmAimRuntime.beginAccuracyCalculation(player, firearm);
-        checkClose(
-            4.0F,
-            FirearmAimRuntime.normalizeBeyondSightAccuracyDistance(20.0F, 2.0F, 6.0F),
-            "far accuracy distance"
-        );
-        checkClose(
-            0.0F,
-            FirearmAimRuntime.convertBeyondSightPermanentPenalty(12.0F),
-            "movement penalty must become aim time"
-        );
-        checkClose(
-            0.0F,
-            FirearmAimRuntime.convertBeyondSightPermanentPenalty(8.0F),
-            "moodle penalty must become aim time"
-        );
-        checkClose(
-            1.0F,
-            FirearmAimRuntime.convertBeyondSightVisionModifier(20.0F / 19.0F),
-            "vision penalty must become aim time"
-        );
-        FirearmAimRuntime.endAccuracyCalculation();
-        runAimingUpdate(player, 0.0F);
-
-        checkClose(
-            6.5F,
-            FirearmAimRuntime.calculateAimTimeMultiplier(player, firearm),
-            "twenty-five recovered accuracy points must add 2.5x aim time"
-        );
-
-        for (int i = 0; i < 40; i++) {
-            runAimingUpdate(player, 1.0F);
-        }
-        check(player.getAimingDelay() > 0.0F, "condition penalties must keep far stabilization in progress");
-
-        for (int i = 0; i < 25; i++) {
-            runAimingUpdate(player, 1.0F);
-        }
-        checkClose(0.0F, player.getAimingDelay(), "condition penalties must remain fully recoverable");
-
-        FirearmAimRuntime.beginAccuracyCalculation(player, firearm);
-        FirearmAimRuntime.normalizeBeyondSightAccuracyDistance(20.0F, 2.0F, 6.0F);
-        checkClose(
-            -3.0F,
-            FirearmAimRuntime.convertBeyondSightPermanentPenalty(-3.0F),
-            "accuracy bonuses must not be converted into penalties"
+            0.98F,
+            FirearmAimRuntime.calculateExcessSightAcquisitionMultiplier(1.0F),
+            "one excess sight tile"
         );
         checkClose(
             0.8F,
-            FirearmAimRuntime.convertBeyondSightVisionModifier(0.8F),
-            "beneficial vision modifiers must remain active"
+            FirearmAimRuntime.calculateExcessSightAcquisitionMultiplier(10.0F),
+            "ten excess sight tiles"
+        );
+        checkClose(
+            0.8F,
+            FirearmAimRuntime.calculateExcessSightAcquisitionMultiplier(100.0F),
+            "excess sight bonus cap"
+        );
+
+        IsoPlayer player = createPlayer(15.0F, 0);
+        HandWeapon weapon = (HandWeapon)player.getPrimaryHandItem();
+        weapon.setMaxSightRange(20.0F);
+        weapon.setMaxRange(10.0F);
+        setTarget(player, 8.0F, new IsoMovingObject(1));
+        checkClose(
+            45.0F,
+            FirearmAimRuntime.calculateRequiredAimWork(player, weapon),
+            "capped sight surplus work"
+        );
+    }
+
+    private static void testConditionsBecomeAimTimeAtEveryRange() {
+        resetRuntime();
+        IsoPlayer player = createPlayer(15.0F, 0);
+        HandWeapon weapon = (HandWeapon)player.getPrimaryHandItem();
+        HitInfo target = setTarget(player, 5.0F, new IsoMovingObject(1));
+
+        FirearmAimRuntime.beginAccuracyCalculation(player, weapon, target);
+        checkClose(
+            5.0F,
+            FirearmAimRuntime.prepareAccuracyDistance(5.0F, 2.0F, 6.0F),
+            "inside-sight accuracy distance"
+        );
+        checkClose(
+            0.0F,
+            FirearmAimRuntime.convertRecoverablePenalty(12.0F),
+            "movement penalty becomes time inside sight"
+        );
+        checkClose(
+            0.0F,
+            FirearmAimRuntime.convertRecoverablePenalty(8.0F),
+            "moodle penalty becomes time inside sight"
+        );
+        checkClose(
+            1.0F,
+            FirearmAimRuntime.convertRecoverableVisionModifier(20.0F / 19.0F),
+            "vision penalty becomes time inside sight"
         );
         FirearmAimRuntime.endAccuracyCalculation();
 
+        checkClose(
+            0.04F,
+            FirearmAimRuntime.calculateConditionSecondsPerPoint(0),
+            "aiming-zero condition time"
+        );
+        checkClose(
+            0.025F,
+            FirearmAimRuntime.calculateConditionSecondsPerPoint(10),
+            "aiming-ten condition time"
+        );
+        checkClose(
+            93.75F,
+            FirearmAimRuntime.calculateRequiredAimWork(player, weapon),
+            "twenty-five penalty points add one second at aiming zero"
+        );
+
+        runAimingUpdate(player, 56.25F);
+        checkClose(6.0F, player.getAimingDelay(), "conditions must keep stabilization open");
+        runAimingUpdate(player, 37.5F);
+        checkClose(0.0F, player.getAimingDelay(), "condition work must remain recoverable");
+    }
+
+    private static void testTargetChangesRequireReacquisition() {
         resetRuntime();
-        player = createPlayer(10.0F);
-        firearm = (HandWeapon)player.getPrimaryHandItem();
-        setTargetDistance(player, 5.0F);
-        FirearmAimRuntime.beginAccuracyCalculation(player, firearm);
-        FirearmAimRuntime.normalizeBeyondSightAccuracyDistance(5.0F, 2.0F, 6.0F);
+        IsoPlayer player = createPlayer(15.0F, 0);
+        setTarget(player, 5.0F, new IsoMovingObject(1));
+        runAimingUpdate(player, 56.25F);
+        checkClose(0.0F, player.getAimingDelay(), "first target must be fully locked");
+
+        setTarget(player, 5.0F, new IsoMovingObject(2));
+        runAimingUpdate(player, 0.0F);
+        checkClose(10.5F, player.getAimingDelay(), "aiming zero retains thirty percent on target change");
+
+        resetRuntime();
+        player = createPlayer(15.0F, 10);
+        setTarget(player, 5.0F, new IsoMovingObject(1));
+        runAimingUpdate(player, 39.375F);
+        setTarget(player, 5.0F, new IsoMovingObject(2));
+        runAimingUpdate(player, 0.0F);
         checkClose(
-            12.0F,
-            FirearmAimRuntime.convertBeyondSightPermanentPenalty(12.0F),
-            "inside-sight penalties must remain vanilla"
+            7.5F,
+            player.getAimingDelay(),
+            "aiming ten still needs the minimum 0.35-second reacquisition"
         );
-        checkClose(
-            1.25F,
-            FirearmAimRuntime.convertBeyondSightVisionModifier(1.25F),
-            "inside-sight vision must remain vanilla"
-        );
-        FirearmAimRuntime.endAccuracyCalculation();
-        checkClose(
-            1.0F,
-            FirearmAimRuntime.calculateAimTimeMultiplier(player, firearm),
-            "inside-sight penalties must not extend aim time"
-        );
+
+        resetRuntime();
+        player = createPlayer(15.0F, 0);
+        IsoMovingObject sameTarget = new IsoMovingObject(1);
+        setTarget(player, 5.0F, sameTarget);
+        runAimingUpdate(player, 28.125F);
+        setTarget(player, 5.0F, sameTarget);
+        runAimingUpdate(player, 0.0F);
+        checkClose(7.5F, player.getAimingDelay(), "rebuilt HitInfo for the same zombie keeps progress");
+    }
+
+    private static void testDistanceChangesOnSameTargetPreserveWork() {
+        resetRuntime();
+        IsoPlayer player = createPlayer(15.0F, 0);
+        HandWeapon weapon = (HandWeapon)player.getPrimaryHandItem();
+        weapon.setMaxRange(16.0F);
+        IsoMovingObject target = new IsoMovingObject(1);
+        setTarget(player, 5.0F, target);
+        runAimingUpdate(player, 56.25F);
+
+        setTarget(player, 16.0F, target);
+        runAimingUpdate(player, 0.0F);
+        checkClose(12.5F, player.getAimingDelay(), "moving the same target farther reopens spread");
+
+        setTarget(player, 5.0F, target);
+        runAimingUpdate(player, 0.0F);
+        checkClose(0.0F, player.getAimingDelay(), "moving the same target closer keeps invested work");
+    }
+
+    private static void testRecoilReopensMinimumSpread() {
+        resetRuntime();
+        checkClose(0.45F, FirearmAimRuntime.calculateRecoilReopenFraction(0), "aiming-zero recoil floor");
+        checkClose(0.35F, FirearmAimRuntime.calculateRecoilReopenFraction(5), "aiming-five recoil floor");
+        checkClose(0.25F, FirearmAimRuntime.calculateRecoilReopenFraction(10), "aiming-ten recoil floor");
+
+        IsoPlayer player = createPlayer(15.0F, 0);
+        setTarget(player, 5.0F, new IsoMovingObject(1));
+        runAimingUpdate(player, 56.25F);
+        player.setAimingDelay(1.0F);
+        FirearmAimRuntime.synchronizePostShotDelay(player);
+        checkClose(6.75F, player.getAimingDelay(), "weak vanilla recoil still reopens forty-five percent");
+
+        resetRuntime();
+        player = createPlayer(15.0F, 10);
+        setTarget(player, 5.0F, new IsoMovingObject(1));
+        runAimingUpdate(player, 39.375F);
+        player.setAimingDelay(1.0F);
+        FirearmAimRuntime.synchronizePostShotDelay(player);
+        checkClose(3.75F, player.getAimingDelay(), "aiming ten recoil floor");
+
+        resetRuntime();
+        player = createPlayer(15.0F, 0);
+        setTarget(player, 5.0F, new IsoMovingObject(1));
+        runAimingUpdate(player, 56.25F);
+        player.setAimingDelay(12.0F);
+        FirearmAimRuntime.synchronizePostShotDelay(player);
+        checkClose(12.0F, player.getAimingDelay(), "stronger vanilla recoil remains authoritative");
     }
 
     private static void testFullyStabilizedTargetIsGuaranteedToTakeDamage() {
         resetRuntime();
-        IsoPlayer player = createPlayer(10.0F);
-        setTargetDistance(player, 5.0F);
-        HitInfo primaryTarget = player.getHitInfoList().get(0);
-        primaryTarget.chance = 20;
-        HitInfo secondaryTarget = new HitInfo(36.0F);
-        secondaryTarget.chance = 15;
-        player.getHitInfoList().add(secondaryTarget);
+        IsoPlayer player = createPlayer(15.0F, 0);
+        HitInfo target = setTarget(player, 5.0F, new IsoMovingObject(1));
+        target.chance = 20;
 
         FirearmAimRuntime.guaranteeFullyStabilizedHit(player);
-        check(primaryTarget.chance == 20, "an unstabilized target must keep its vanilla hit chance");
+        check(target.chance == 20, "unstabilized target must retain vanilla chance");
 
-        for (int i = 0; i < 10; i++) {
-            runAimingUpdate(player, 1.0F);
-        }
+        runAimingUpdate(player, 56.25F);
         FirearmAimRuntime.guaranteeFullyStabilizedHit(player);
-        check(primaryTarget.chance == 100, "the fully stabilized primary target must have 100 hit chance");
-        check(secondaryTarget.chance == 15, "full lock must not guarantee every shotgun or piercing target");
+        check(target.chance == 100, "fully stabilized primary target must be guaranteed");
 
-        setTargetDistance(player, 20.0F);
-        HitInfo farTarget = player.getHitInfoList().get(0);
-        farTarget.chance = 20;
+        target = setTarget(player, 5.0F, new IsoMovingObject(2));
+        target.chance = 20;
         FirearmAimRuntime.guaranteeFullyStabilizedHit(player);
-        check(farTarget.chance == 20, "moving a completed lock farther away must reopen it before guaranteeing damage");
-
-        for (int i = 0; i < 30; i++) {
-            runAimingUpdate(player, 1.0F);
-        }
-        FirearmAimRuntime.guaranteeFullyStabilizedHit(player);
-        check(farTarget.chance == 100, "a fully completed far lock must guarantee damage");
-
-        FirearmAimRuntime.beginAccuracyCalculation(player, (HandWeapon)player.getPrimaryHandItem());
-        FirearmAimRuntime.normalizeBeyondSightAccuracyDistance(20.0F, 2.0F, 6.0F);
-        FirearmAimRuntime.convertBeyondSightPermanentPenalty(10.0F);
-        FirearmAimRuntime.endAccuracyCalculation();
-        farTarget.chance = 20;
-        FirearmAimRuntime.guaranteeFullyStabilizedHit(player);
-        check(farTarget.chance == 20, "new recoverable penalties must reopen full lock before guaranteeing damage");
-
-        for (int i = 0; i < 10; i++) {
-            runAimingUpdate(player, 1.0F);
-        }
-        FirearmAimRuntime.guaranteeFullyStabilizedHit(player);
-        check(farTarget.chance == 100, "recovered condition penalties must permit guaranteed damage again");
+        check(target.chance == 20, "guarantee must not transfer to another zombie");
 
         player.setAiming(false);
-        farTarget.chance = 20;
+        target.chance = 20;
         FirearmAimRuntime.guaranteeFullyStabilizedHit(player);
-        check(farTarget.chance == 20, "the guarantee must apply only while actively aiming");
+        check(target.chance == 20, "guarantee applies only while aiming");
+    }
+
+    private static void testAccuracyChangesAreScopedToValidTargets() {
+        resetRuntime();
+        IsoPlayer player = createPlayer(15.0F, 0);
+        HandWeapon firearm = (HandWeapon)player.getPrimaryHandItem();
+        HandWeapon nonFirearm = createWeapon(false);
+        HitInfo target = setTarget(player, 10.0F, new IsoMovingObject(1));
+
+        FirearmAimRuntime.beginAccuracyCalculation(player, nonFirearm, target);
+        checkClose(
+            10.0F,
+            FirearmAimRuntime.prepareAccuracyDistance(10.0F, 2.0F, 6.0F),
+            "non-firearm distance"
+        );
+        checkClose(
+            12.0F,
+            FirearmAimRuntime.convertRecoverablePenalty(12.0F),
+            "non-firearm penalty"
+        );
+        FirearmAimRuntime.endAccuracyCalculation();
+
+        FirearmAimRuntime.beginAccuracyCalculation(player, firearm, null);
+        checkClose(
+            6.0F,
+            FirearmAimRuntime.prepareAccuracyDistance(6.0F, 2.0F, 6.0F),
+            "no-target reticle distance"
+        );
+        checkClose(
+            12.0F,
+            FirearmAimRuntime.convertRecoverablePenalty(12.0F),
+            "no-target reticle keeps vanilla penalty"
+        );
+        FirearmAimRuntime.endAccuracyCalculation();
+
+        FirearmAimRuntime.beginAccuracyCalculation(player, firearm, target);
+        checkClose(
+            4.0F,
+            FirearmAimRuntime.prepareAccuracyDistance(10.0F, 2.0F, 6.0F),
+            "far target uses optimal sight-band midpoint"
+        );
+        checkClose(
+            8.0F,
+            FirearmAimRuntime.removeBeyondSightDelayScaling(10.0F, 6.0F, 11.2F),
+            "far target removes vanilla double-scaling"
+        );
+        checkClose(
+            -3.0F,
+            FirearmAimRuntime.convertRecoverablePenalty(-3.0F),
+            "accuracy bonuses remain active"
+        );
+        checkClose(
+            0.8F,
+            FirearmAimRuntime.convertRecoverableVisionModifier(0.8F),
+            "beneficial vision modifiers remain active"
+        );
+        FirearmAimRuntime.endAccuracyCalculation();
+
+        FirearmAimRuntime.beginCriticalChanceCalculation(player, new IsoPlayer());
+        checkClose(
+            4.0F,
+            FirearmAimRuntime.prepareAccuracyDistance(10.0F, 2.0F, 6.0F),
+            "critical chance shares far normalization"
+        );
+        FirearmAimRuntime.endAccuracyCalculation();
     }
 
     private static void testPatchMetadata() throws ReflectiveOperationException {
@@ -505,41 +477,25 @@ public final class FirearmAimingPatchTest {
             "getWornItemsVisionModifier"
         );
 
-        Method updateEnter = FirearmAimingPatches.AimingDelayUpdate.class.getDeclaredMethod(
+        Method scopeEnter = FirearmAimingPatches.HitChanceCalculationScope.class.getDeclaredMethod(
             "enter",
+            IsoGameCharacter.class,
+            HandWeapon.class,
+            HitInfo.class
+        );
+        assertArgument(scopeEnter.getParameters()[0], 0, true, "hit owner");
+        assertArgument(scopeEnter.getParameters()[1], 1, true, "hit weapon");
+        assertArgument(scopeEnter.getParameters()[2], 2, true, "hit target");
+        assertThrowableExit(FirearmAimingPatches.HitChanceCalculationScope.class, "hit scope");
+
+        Method criticalEnter = FirearmAimingPatches.CriticalChanceCalculationScope.class.getDeclaredMethod(
+            "enter",
+            IsoPlayer.class,
             IsoGameCharacter.class
         );
-        assertThis(updateEnter.getParameters()[0], "aim-delay receiver");
-
-        Method postShotExit = FirearmAimingPatches.PostShotAimingDelay.class.getDeclaredMethod(
-            "exit",
-            IsoPlayer.class
-        );
-        assertArgument(postShotExit.getParameters()[0], 0, true, "post-shot player");
-
-        Method stabilizedHitExit = FirearmAimingPatches.FullyStabilizedHitChance.class.getDeclaredMethod(
-            "exit",
-            IsoGameCharacter.class
-        );
-        assertArgument(stabilizedHitExit.getParameters()[0], 0, true, "fully stabilized hit owner");
-
-        Method scopeExit = FirearmAimingPatches.HitChanceCalculationScope.class.getDeclaredMethod("exit");
-        Patch.OnExit scopeExitAdvice = scopeExit.getAnnotation(Patch.OnExit.class);
-        check(scopeExitAdvice != null, "accuracy scope exit must carry @Patch.OnExit");
-        check(Throwable.class.equals(scopeExitAdvice.onThrowable()), "accuracy scope must close after exceptions");
-
-        Method criticalScopeEnter = FirearmAimingPatches.CriticalChanceCalculationScope.class.getDeclaredMethod(
-            "enter",
-            IsoPlayer.class
-        );
-        assertThis(criticalScopeEnter.getParameters()[0], "critical-chance receiver");
-        Method criticalScopeExit = FirearmAimingPatches.CriticalChanceCalculationScope.class.getDeclaredMethod("exit");
-        Patch.OnExit criticalScopeExitAdvice = criticalScopeExit.getAnnotation(Patch.OnExit.class);
-        check(criticalScopeExitAdvice != null, "critical-chance scope exit must carry @Patch.OnExit");
-        check(
-            Throwable.class.equals(criticalScopeExitAdvice.onThrowable()),
-            "critical-chance scope must close after exceptions"
-        );
+        assertThis(criticalEnter.getParameters()[0], "critical receiver");
+        assertArgument(criticalEnter.getParameters()[1], 0, true, "critical target");
+        assertThrowableExit(FirearmAimingPatches.CriticalChanceCalculationScope.class, "critical scope");
 
         Method distanceEnter = FirearmAimingPatches.DistanceModifier.class.getDeclaredMethod(
             "enter",
@@ -589,15 +545,16 @@ public final class FirearmAimingPatchTest {
             FirearmAimingPatches.MoodlesPenalty.class,
             FirearmAimingPatches.VisionPenalty.class
         );
-        check(discovered.size() == expected.size(), "ZombieBuddy must discover exactly twelve patch classes");
+        check(discovered.size() == expected.size(), "ZombieBuddy must discover exactly twelve patches");
         for (Class<?> patchClass : expected) {
             check(discovered.contains(patchClass), "ZombieBuddy missed " + patchClass.getName());
         }
     }
 
-    private static IsoPlayer createPlayer(float aimingDelay) {
+    private static IsoPlayer createPlayer(float aimingDelay, int aimingLevel) {
         IsoPlayer player = new IsoPlayer();
         player.setAiming(true);
+        player.setAimingLevel(aimingLevel);
         player.setPrimaryHandItem(createWeapon(true));
         player.setAimingDelay(aimingDelay);
         return player;
@@ -606,15 +563,20 @@ public final class FirearmAimingPatchTest {
     private static HandWeapon createWeapon(boolean aimedFirearm) {
         HandWeapon weapon = new HandWeapon();
         weapon.setAimedFirearm(aimedFirearm);
-        weapon.setAimingTime(10);
+        weapon.setAimingTime(15);
         weapon.setMaxSightRange(6.0F);
-        weapon.setMaxRange(20.0F);
+        weapon.setMaxRange(16.0F);
         return weapon;
     }
 
-    private static void setTargetDistance(IsoGameCharacter character, float distance) {
+    private static HitInfo setTarget(
+            IsoGameCharacter character,
+            float distance,
+            IsoMovingObject target) {
         character.getHitInfoList().clear();
-        character.getHitInfoList().add(new HitInfo(distance * distance));
+        HitInfo hitInfo = new HitInfo(distance * distance, target);
+        character.getHitInfoList().add(hitInfo);
+        return hitInfo;
     }
 
     private static void runAimingUpdate(IsoGameCharacter character, float vanillaReduction) {
@@ -624,12 +586,8 @@ public final class FirearmAimingPatchTest {
     }
 
     private static void resetRuntime() {
-        resetOptions();
-        FirearmAimRuntime.resetForTest();
-    }
-
-    private static void resetOptions() {
         SandboxOptions.instance.clearOptionsForTest();
+        FirearmAimRuntime.resetForTest();
     }
 
     private static void assertPatchTarget(Class<?> patchClass, String className, String methodName) {
@@ -656,6 +614,14 @@ public final class FirearmAimingPatchTest {
         Patch.Return returnValue = parameter.getAnnotation(Patch.Return.class);
         check(returnValue != null, label + " must carry @Patch.Return");
         check(!returnValue.readOnly(), label + " must remain mutable");
+    }
+
+    private static void assertThrowableExit(Class<?> patchClass, String label)
+            throws ReflectiveOperationException {
+        Method exit = patchClass.getDeclaredMethod("exit");
+        Patch.OnExit advice = exit.getAnnotation(Patch.OnExit.class);
+        check(advice != null, label + " exit must carry @Patch.OnExit");
+        check(Throwable.class.equals(advice.onThrowable()), label + " must close after exceptions");
     }
 
     private static void checkClose(float expected, float actual, String message) {

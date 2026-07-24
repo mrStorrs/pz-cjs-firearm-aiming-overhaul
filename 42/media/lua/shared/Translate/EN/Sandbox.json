@@ -1,9 +1,9 @@
 {
   "Sandbox_CJSFirearmAimingOverhaul": "CJS Firearm Aiming Overhaul",
-  "Sandbox_CJSFirearmAimingOverhaul_MaximumAimTimeMultiplier": "Maximum Distance Aim-Time Multiplier",
-  "Sandbox_CJSFirearmAimingOverhaul_MaximumAimTimeMultiplier_tooltip": "Highest distance-only aim-time multiplier, reached after the configured number of tiles beyond effective-sight range. If effective sight exceeds physical range, the reciprocal curve speeds acquisition instead. Recoverable condition penalties can add more stabilization work. Default: 4.0.",
-  "Sandbox_CJSFirearmAimingOverhaul_CurveExponent": "Aim-Time Curve",
-  "Sandbox_CJSFirearmAimingOverhaul_CurveExponent_tooltip": "Controls how quickly extra aim time ramps up beyond effective-sight range. Higher values keep the increase gentler near sight range and steeper near the full-penalty distance. Default: 1.5.",
-  "Sandbox_CJSFirearmAimingOverhaul_FullPenaltyDistanceTiles": "Tiles to Maximum Aim Time",
-  "Sandbox_CJSFirearmAimingOverhaul_FullPenaltyDistanceTiles_tooltip": "Absolute sight-to-target distance required to reach the maximum slowdown, or absolute sight surplus required to reach its reciprocal speed bonus. Default: 10."
+  "Sandbox_CJSFirearmAimingOverhaul_MaximumAimTimeMultiplier": "Maximum Far-Aim Extra Seconds",
+  "Sandbox_CJSFirearmAimingOverhaul_MaximumAimTimeMultiplier_tooltip": "Extra seconds used by the normalized far-range curve at a full-weight range gap. The curve also has a one-second entry cost and is scaled by Aiming skill. Default: 5.0.",
+  "Sandbox_CJSFirearmAimingOverhaul_CurveExponent": "Far-Range Progress Curve",
+  "Sandbox_CJSFirearmAimingOverhaul_CurveExponent_tooltip": "Controls how quickly extra time grows as the target moves from effective sight to physical maximum range. Higher values are gentler near sight range and steeper near maximum range. Default: 1.25.",
+  "Sandbox_CJSFirearmAimingOverhaul_FullPenaltyDistanceTiles": "Reference Range Gap",
+  "Sandbox_CJSFirearmAimingOverhaul_FullPenaltyDistanceTiles_tooltip": "Sight-to-maximum gap that receives the full far-range penalty. Smaller gaps are softened by the square root of their relative size; larger gaps use normalized progress and are not penalized again just for being longer. Default: 10 tiles."
 }

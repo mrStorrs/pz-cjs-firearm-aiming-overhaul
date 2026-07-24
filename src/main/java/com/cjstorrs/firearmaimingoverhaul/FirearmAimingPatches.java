@@ -4,6 +4,7 @@ import me.zed_0xff.zombie_buddy.Patch;
 import zombie.characters.IsoGameCharacter;
 import zombie.characters.IsoPlayer;
 import zombie.inventory.types.HandWeapon;
+import zombie.network.fields.hit.HitInfo;
 
 public final class FirearmAimingPatches {
     private FirearmAimingPatches() {
@@ -43,8 +44,9 @@ public final class FirearmAimingPatches {
         @Patch.OnEnter
         public static void enter(
                 @Patch.Argument(0) IsoGameCharacter owner,
-                @Patch.Argument(1) HandWeapon weapon) {
-            FirearmAimRuntime.beginAccuracyCalculation(owner, weapon);
+                @Patch.Argument(1) HandWeapon weapon,
+                @Patch.Argument(2) HitInfo hitInfo) {
+            FirearmAimRuntime.beginAccuracyCalculation(owner, weapon, hitInfo);
         }
 
         @Patch.OnExit(onThrowable = Throwable.class)
@@ -56,8 +58,10 @@ public final class FirearmAimingPatches {
     @Patch(className = "zombie.characters.IsoPlayer", methodName = "calculateCritChance")
     public static final class CriticalChanceCalculationScope {
         @Patch.OnEnter
-        public static void enter(@Patch.This IsoPlayer player) {
-            FirearmAimRuntime.beginCriticalChanceCalculation(player);
+        public static void enter(
+                @Patch.This IsoPlayer player,
+                @Patch.Argument(0) IsoGameCharacter target) {
+            FirearmAimRuntime.beginCriticalChanceCalculation(player, target);
         }
 
         @Patch.OnExit(onThrowable = Throwable.class)
@@ -73,7 +77,7 @@ public final class FirearmAimingPatches {
                 @Patch.Argument(value = 0, readOnly = false) float distance,
                 @Patch.Argument(1) float minimumSightRange,
                 @Patch.Argument(2) float maximumSightRange) {
-            distance = FirearmAimRuntime.normalizeBeyondSightAccuracyDistance(
+            distance = FirearmAimRuntime.prepareAccuracyDistance(
                 distance,
                 minimumSightRange,
                 maximumSightRange
@@ -100,7 +104,7 @@ public final class FirearmAimingPatches {
     public static final class MovementPenalty {
         @Patch.OnExit
         public static void exit(@Patch.Return(readOnly = false) float penalty) {
-            penalty = FirearmAimRuntime.convertBeyondSightPermanentPenalty(penalty);
+            penalty = FirearmAimRuntime.convertRecoverablePenalty(penalty);
         }
     }
 
@@ -108,7 +112,7 @@ public final class FirearmAimingPatches {
     public static final class PainPenalty {
         @Patch.OnExit
         public static void exit(@Patch.Return(readOnly = false) float penalty) {
-            penalty = FirearmAimRuntime.convertBeyondSightPermanentPenalty(penalty);
+            penalty = FirearmAimRuntime.convertRecoverablePenalty(penalty);
         }
     }
 
@@ -116,7 +120,7 @@ public final class FirearmAimingPatches {
     public static final class WeatherPenalty {
         @Patch.OnExit
         public static void exit(@Patch.Return(readOnly = false) float penalty) {
-            penalty = FirearmAimRuntime.convertBeyondSightPermanentPenalty(penalty);
+            penalty = FirearmAimRuntime.convertRecoverablePenalty(penalty);
         }
     }
 
@@ -124,7 +128,7 @@ public final class FirearmAimingPatches {
     public static final class MoodlesPenalty {
         @Patch.OnExit
         public static void exit(@Patch.Return(readOnly = false) float penalty) {
-            penalty = FirearmAimRuntime.convertBeyondSightPermanentPenalty(penalty);
+            penalty = FirearmAimRuntime.convertRecoverablePenalty(penalty);
         }
     }
 
@@ -132,7 +136,7 @@ public final class FirearmAimingPatches {
     public static final class VisionPenalty {
         @Patch.OnExit
         public static void exit(@Patch.Return(readOnly = false) float modifier) {
-            modifier = FirearmAimRuntime.convertBeyondSightVisionModifier(modifier);
+            modifier = FirearmAimRuntime.convertRecoverableVisionModifier(modifier);
         }
     }
 }

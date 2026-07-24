@@ -5,14 +5,31 @@ import java.util.Map;
 import java.util.WeakHashMap;
 import zombie.characters.IsoGameCharacter;
 import zombie.characters.IsoPlayer;
+import zombie.characters.skills.PerkFactory;
 import zombie.inventory.InventoryItem;
 import zombie.inventory.types.HandWeapon;
+import zombie.iso.IsoMovingObject;
 import zombie.network.fields.hit.HitInfo;
 import zombie.util.list.PZArrayList;
 
 public final class FirearmAimRuntime {
     private static final float MINIMUM_DELAY = 0.0001F;
     private static final float RANGE_EPSILON = 0.001F;
+    private static final float VANILLA_WORK_PER_SECOND = 37.5F;
+    private static final float MINIMUM_LOCK_SECONDS_AT_LEVEL_ZERO = 1.5F;
+    private static final float MINIMUM_LOCK_SECONDS_PER_LEVEL = 0.08F;
+    private static final float CONDITION_SECONDS_PER_POINT_AT_LEVEL_ZERO = 0.04F;
+    private static final float CONDITION_SECONDS_PER_POINT_PER_LEVEL = 0.0015F;
+    private static final float TARGET_PROGRESS_RETENTION_AT_LEVEL_ZERO = 0.30F;
+    private static final float TARGET_PROGRESS_RETENTION_PER_LEVEL = 0.04F;
+    private static final float MINIMUM_TARGET_REACQUIRE_SECONDS = 0.35F;
+    private static final float RECOIL_REOPEN_AT_LEVEL_ZERO = 0.45F;
+    private static final float RECOIL_REOPEN_PER_LEVEL = 0.02F;
+    private static final float EXCESS_SIGHT_BONUS_PER_TILE = 0.02F;
+    private static final float MINIMUM_EXCESS_SIGHT_ACQUISITION_MULTIPLIER = 0.80F;
+    private static final long NO_TARGET_KEY = 0L;
+    private static final long OBJECT_TARGET_NAMESPACE = 1L << 62;
+    private static final long HIT_INFO_TARGET_NAMESPACE = 1L << 61;
     private static final Map<IsoGameCharacter, AimState> AIM_STATES =
         Collections.synchronizedMap(new WeakHashMap<>());
     private static final ThreadLocal<AccuracyScope> ACCURACY_SCOPE =
@@ -28,14 +45,8 @@ public final class FirearmAimRuntime {
             return;
         }
 
-        AimState state = AIM_STATES.get(character);
-        if (state == null || state.weapon != weapon) {
-            state = createState(character, weapon);
-            AIM_STATES.put(character, state);
-        }
-
-        state.consumePendingPenalty();
-        state.multiplier = calculateAimTimeMultiplier(character, weapon);
+        AimState state = getOrCreateState(character, weapon);
+        refreshRequirement(character, state);
         float remainingWork = state.getRemainingWork();
         character.setAimingDelay(remainingWork);
         state.workBeforeVanillaUpdate = remainingWork;
@@ -51,7 +62,7 @@ public final class FirearmAimRuntime {
         state.updatePending = false;
         float remainingWork = character.getAimingDelay();
         float completedWork = Math.max(0.0F, state.workBeforeVanillaUpdate - remainingWork);
-        state.completedWork += completedWork;
+        state.completedWork = Math.min(state.requiredWork, state.completedWork + completedWork);
         character.setAimingDelay(state.getEffectiveDelay());
     }
 
@@ -61,43 +72,14 @@ public final class FirearmAimRuntime {
             return;
         }
 
-        state.multiplier = calculateAimTimeMultiplier(player, state.weapon);
-        state.completedWork = (state.baseDelay - player.getAimingDelay()) * state.multiplier;
+        refreshRequirement(player, state);
+        int aimingLevel = getAimingLevel(player);
+        float vanillaCompletion = clamp01(1.0F - player.getAimingDelay() / state.baseDelay);
+        float minimumReopen = calculateRecoilReopenFraction(aimingLevel);
+        float completionCeiling = 1.0F - minimumReopen;
+        state.completedWork = state.requiredWork * Math.min(vanillaCompletion, completionCeiling);
         state.updatePending = false;
-    }
-
-    public static float calculateAimTimeMultiplier(IsoGameCharacter character, HandWeapon weapon) {
-        if (weapon == null || !weapon.isAimedFirearm()) {
-            return 1.0F;
-        }
-
-        PZArrayList<HitInfo> hitInfoList = character.getHitInfoList();
-        if (hitInfoList == null || hitInfoList.isEmpty()) {
-            return 1.0F;
-        }
-
-        float minimumDistanceSquared = Float.MAX_VALUE;
-        for (int index = 0; index < hitInfoList.size(); index++) {
-            minimumDistanceSquared = Math.min(minimumDistanceSquared, hitInfoList.get(index).distSq);
-        }
-
-        float distance = (float)Math.sqrt(Math.max(0.0F, minimumDistanceSquared));
-        float sightRange = weapon.getMaxSightRange(character);
-        float physicalRange = getPhysicalRange(character, weapon);
-        if (sightRange > physicalRange + RANGE_EPSILON) {
-            return 1.0F / calculateRangeCurveMultiplier(sightRange - physicalRange);
-        }
-        if (distance <= sightRange || physicalRange <= sightRange + RANGE_EPSILON) {
-            return 1.0F;
-        }
-
-        float distanceMultiplier = calculateRangeCurveMultiplier(distance - sightRange);
-        AimState state = AIM_STATES.get(character);
-        if (state == null || state.weapon != weapon) {
-            return distanceMultiplier;
-        }
-
-        return distanceMultiplier + state.recoverablePenalty / state.baseDelay;
+        player.setAimingDelay(state.getEffectiveDelay());
     }
 
     public static void guaranteeFullyStabilizedHit(IsoGameCharacter character) {
@@ -113,51 +95,69 @@ public final class FirearmAimRuntime {
         hitInfoList.get(0).chance = 100;
     }
 
-    public static void beginAccuracyCalculation(IsoGameCharacter owner, HandWeapon weapon) {
+    public static void beginAccuracyCalculation(
+            IsoGameCharacter owner,
+            HandWeapon weapon,
+            HitInfo hitInfo) {
         AccuracyScope scope = ACCURACY_SCOPE.get();
         if (scope.depth++ == 0) {
             scope.active = weapon != null && weapon.isAimedFirearm();
             scope.owner = owner;
             scope.weapon = weapon;
             scope.physicalRange = scope.active ? getPhysicalRange(owner, weapon) : 0.0F;
-            scope.beyondSight = false;
+            scope.hasTarget = hitInfo != null;
+            scope.targetKey = hitInfo == null ? NO_TARGET_KEY : getTargetKey(hitInfo);
+            scope.convertPenalties = false;
             scope.targetDistance = Float.MAX_VALUE;
             scope.recoverablePenalty = 0.0F;
         }
     }
 
-    public static void beginCriticalChanceCalculation(IsoPlayer player) {
-        beginAccuracyCalculation(player, getAimedFirearm(player));
+    public static void beginCriticalChanceCalculation(
+            IsoPlayer player,
+            IsoGameCharacter target) {
+        AccuracyScope scope = ACCURACY_SCOPE.get();
+        if (scope.depth++ == 0) {
+            HandWeapon weapon = getAimedFirearm(player);
+            scope.active = weapon != null;
+            scope.owner = player;
+            scope.weapon = weapon;
+            scope.physicalRange = scope.active ? getPhysicalRange(player, weapon) : 0.0F;
+            scope.hasTarget = target != null;
+            scope.targetKey = target == null ? NO_TARGET_KEY : getTargetKey(target);
+            scope.convertPenalties = false;
+            scope.targetDistance = Float.MAX_VALUE;
+            scope.recoverablePenalty = 0.0F;
+        }
     }
 
     public static void endAccuracyCalculation() {
         AccuracyScope scope = ACCURACY_SCOPE.get();
         if (scope.depth <= 1) {
             captureRecoverablePenalty(scope);
-            scope.depth = 0;
-            scope.active = false;
-            scope.owner = null;
-            scope.weapon = null;
-            scope.physicalRange = 0.0F;
-            scope.beyondSight = false;
-            scope.targetDistance = Float.MAX_VALUE;
-            scope.recoverablePenalty = 0.0F;
+            scope.reset();
         } else {
             scope.depth--;
         }
     }
 
-    public static float normalizeBeyondSightAccuracyDistance(
+    public static float prepareAccuracyDistance(
             float distance,
             float minimumSightRange,
             float maximumSightRange) {
-        if (!isBeyondSightWithinPhysicalRange(distance, maximumSightRange)) {
+        AccuracyScope scope = ACCURACY_SCOPE.get();
+        if (!scope.active
+                || !scope.hasTarget
+                || distance > scope.physicalRange + RANGE_EPSILON) {
             return distance;
         }
 
-        AccuracyScope scope = ACCURACY_SCOPE.get();
-        scope.beyondSight = true;
+        scope.convertPenalties = true;
         scope.targetDistance = distance;
+        if (distance <= maximumSightRange) {
+            return distance;
+        }
+
         if (minimumSightRange < 0.0F || minimumSightRange >= maximumSightRange) {
             return maximumSightRange;
         }
@@ -165,9 +165,9 @@ public final class FirearmAimRuntime {
         return minimumSightRange + (maximumSightRange - minimumSightRange) * 0.5F;
     }
 
-    public static float convertBeyondSightPermanentPenalty(float penalty) {
+    public static float convertRecoverablePenalty(float penalty) {
         AccuracyScope scope = ACCURACY_SCOPE.get();
-        if (!scope.beyondSight || !Float.isFinite(penalty) || penalty <= 0.0F) {
+        if (!scope.convertPenalties || !Float.isFinite(penalty) || penalty <= 0.0F) {
             return penalty;
         }
 
@@ -175,9 +175,9 @@ public final class FirearmAimRuntime {
         return 0.0F;
     }
 
-    public static float convertBeyondSightVisionModifier(float modifier) {
+    public static float convertRecoverableVisionModifier(float modifier) {
         AccuracyScope scope = ACCURACY_SCOPE.get();
-        if (!scope.beyondSight || !Float.isFinite(modifier) || modifier <= 1.0F) {
+        if (!scope.convertPenalties || !Float.isFinite(modifier) || modifier <= 1.0F) {
             return modifier;
         }
 
@@ -189,7 +189,11 @@ public final class FirearmAimRuntime {
             float distance,
             float maximumSightRange,
             float vanillaPenalty) {
-        if (!isBeyondSightWithinPhysicalRange(distance, maximumSightRange)) {
+        AccuracyScope scope = ACCURACY_SCOPE.get();
+        if (!scope.active
+                || !scope.hasTarget
+                || distance <= maximumSightRange
+                || distance > scope.physicalRange + RANGE_EPSILON) {
             return vanillaPenalty;
         }
 
@@ -197,9 +201,73 @@ public final class FirearmAimRuntime {
         return vanillaDistanceFactor > 0.0F ? vanillaPenalty / vanillaDistanceFactor : vanillaPenalty;
     }
 
+    static float calculateMinimumLockSeconds(int aimingLevel) {
+        return MINIMUM_LOCK_SECONDS_AT_LEVEL_ZERO
+            - MINIMUM_LOCK_SECONDS_PER_LEVEL * clampAimingLevel(aimingLevel);
+    }
+
+    static float calculateConditionSecondsPerPoint(int aimingLevel) {
+        return CONDITION_SECONDS_PER_POINT_AT_LEVEL_ZERO
+            - CONDITION_SECONDS_PER_POINT_PER_LEVEL * clampAimingLevel(aimingLevel);
+    }
+
+    static float calculateTargetProgressRetention(int aimingLevel) {
+        return TARGET_PROGRESS_RETENTION_AT_LEVEL_ZERO
+            + TARGET_PROGRESS_RETENTION_PER_LEVEL * clampAimingLevel(aimingLevel);
+    }
+
+    static float calculateRecoilReopenFraction(int aimingLevel) {
+        return RECOIL_REOPEN_AT_LEVEL_ZERO
+            - RECOIL_REOPEN_PER_LEVEL * clampAimingLevel(aimingLevel);
+    }
+
+    static float calculateExcessSightAcquisitionMultiplier(float excessSightTiles) {
+        return Math.max(
+            MINIMUM_EXCESS_SIGHT_ACQUISITION_MULTIPLIER,
+            1.0F - EXCESS_SIGHT_BONUS_PER_TILE * Math.max(0.0F, excessSightTiles)
+        );
+    }
+
+    static float calculateFarAimSeconds(
+            int aimingLevel,
+            float targetDistance,
+            float sightRange,
+            float physicalRange) {
+        float gap = physicalRange - sightRange;
+        if (gap <= RANGE_EPSILON || targetDistance <= sightRange) {
+            return 0.0F;
+        }
+
+        float progress = clamp01((targetDistance - sightRange) / gap);
+        float gapWeight = (float)Math.sqrt(
+            Math.min(1.0F, gap / FirearmAimSettings.getReferenceGapTiles())
+        );
+        float rawSeconds = 1.0F
+            + FirearmAimSettings.getMaximumFarExtraSeconds()
+                * gapWeight
+                * (float)Math.pow(progress, FirearmAimSettings.getFarProgressExponent());
+        float skillMultiplier = 1.25F - 0.045F * clampAimingLevel(aimingLevel);
+        return rawSeconds * skillMultiplier;
+    }
+
+    static float calculateRequiredAimWork(IsoGameCharacter character, HandWeapon weapon) {
+        AimState state = getOrCreateState(character, weapon);
+        refreshRequirement(character, state);
+        return state.requiredWork;
+    }
+
     static void resetForTest() {
         AIM_STATES.clear();
         ACCURACY_SCOPE.remove();
+    }
+
+    private static AimState getOrCreateState(IsoGameCharacter character, HandWeapon weapon) {
+        AimState state = AIM_STATES.get(character);
+        if (state == null || state.weapon != weapon) {
+            state = createState(character, weapon);
+            AIM_STATES.put(character, state);
+        }
+        return state;
     }
 
     private static AimState createState(IsoGameCharacter character, HandWeapon weapon) {
@@ -208,22 +276,81 @@ public final class FirearmAimRuntime {
             ? currentDelay
             : Math.max(MINIMUM_DELAY, (float)weapon.getAimingTime());
         AimState state = new AimState(weapon, baseDelay);
-        state.completedWork = baseDelay - currentDelay;
+        state.completedWork = Math.max(0.0F, baseDelay - currentDelay);
+        TargetProfile target = getPrimaryTarget(character);
+        state.targetKey = target.key;
+        state.targetInitialized = true;
         return state;
     }
 
+    private static void refreshRequirement(IsoGameCharacter character, AimState state) {
+        TargetProfile target = getPrimaryTarget(character);
+        boolean targetChanged = state.targetInitialized && state.targetKey != target.key;
+        state.consumePendingPenalty(target.key, targetChanged);
+
+        int aimingLevel = getAimingLevel(character);
+        float workRate = getWorkRate(aimingLevel);
+        float baseWork = Math.max(
+            state.baseDelay,
+            calculateMinimumLockSeconds(aimingLevel) * workRate
+        );
+        float sightRange = state.weapon.getMaxSightRange(character);
+        float physicalRange = getPhysicalRange(character, state.weapon);
+        if (sightRange > physicalRange + RANGE_EPSILON) {
+            baseWork *= calculateExcessSightAcquisitionMultiplier(sightRange - physicalRange);
+        }
+
+        float farWork = calculateFarAimSeconds(
+            aimingLevel,
+            target.distance,
+            sightRange,
+            physicalRange
+        ) * workRate;
+        float conditionWork = state.recoverablePenalty
+            * calculateConditionSecondsPerPoint(aimingLevel)
+            * workRate;
+        float requiredWork = Math.max(MINIMUM_DELAY, baseWork + farWork + conditionWork);
+        state.applyRequirement(target.key, requiredWork, aimingLevel, workRate);
+    }
+
     private static void captureRecoverablePenalty(AccuracyScope scope) {
-        if (!scope.active || !scope.beyondSight || scope.owner == null || scope.weapon == null) {
+        if (!scope.active
+                || !scope.hasTarget
+                || !scope.convertPenalties
+                || scope.owner == null
+                || scope.weapon == null) {
             return;
         }
 
-        AimState state = AIM_STATES.get(scope.owner);
-        if (state == null || state.weapon != scope.weapon) {
-            state = createState(scope.owner, scope.weapon);
-            AIM_STATES.put(scope.owner, state);
+        AimState state = getOrCreateState(scope.owner, scope.weapon);
+        state.capturePendingPenalty(
+            scope.targetKey,
+            scope.targetDistance,
+            scope.recoverablePenalty
+        );
+    }
+
+    private static TargetProfile getPrimaryTarget(IsoGameCharacter character) {
+        PZArrayList<HitInfo> hitInfoList = character.getHitInfoList();
+        if (hitInfoList == null || hitInfoList.isEmpty()) {
+            return TargetProfile.NONE;
         }
 
-        state.capturePendingPenalty(scope.targetDistance, scope.recoverablePenalty);
+        HitInfo hitInfo = hitInfoList.get(0);
+        float distance = (float)Math.sqrt(Math.max(0.0F, hitInfo.distSq));
+        return new TargetProfile(getTargetKey(hitInfo), distance);
+    }
+
+    private static long getTargetKey(HitInfo hitInfo) {
+        IsoMovingObject object = hitInfo.getObject();
+        if (object != null) {
+            return getTargetKey(object);
+        }
+        return HIT_INFO_TARGET_NAMESPACE | (System.identityHashCode(hitInfo) & 0xffffffffL);
+    }
+
+    private static long getTargetKey(IsoMovingObject object) {
+        return OBJECT_TARGET_NAMESPACE | (object.getID() & 0xffffffffL);
     }
 
     private static HandWeapon getAimedFirearm(IsoGameCharacter character) {
@@ -235,14 +362,20 @@ public final class FirearmAimRuntime {
         return weapon.getMaxRange(character) * weapon.getRangeMod(character);
     }
 
-    private static float calculateRangeCurveMultiplier(float rangeDifference) {
-        float curveProgress = Math.min(
-            1.0F,
-            Math.max(0.0F, rangeDifference) / FirearmAimSettings.getFullPenaltyDistanceTiles()
-        );
-        return 1.0F
-            + (FirearmAimSettings.getMaximumMultiplier() - 1.0F)
-                * (float)Math.pow(curveProgress, FirearmAimSettings.getCurveExponent());
+    private static int getAimingLevel(IsoGameCharacter character) {
+        return clampAimingLevel(character.getPerkLevel(PerkFactory.Perks.Aiming));
+    }
+
+    private static int clampAimingLevel(int aimingLevel) {
+        return Math.max(0, Math.min(10, aimingLevel));
+    }
+
+    private static float getWorkRate(int aimingLevel) {
+        return VANILLA_WORK_PER_SECOND * (1.0F + 0.05F * clampAimingLevel(aimingLevel));
+    }
+
+    private static float clamp01(float value) {
+        return Math.max(0.0F, Math.min(1.0F, value));
     }
 
     private static boolean isFullyStabilized(IsoGameCharacter character) {
@@ -252,26 +385,21 @@ public final class FirearmAimRuntime {
             return character.getAimingDelay() <= MINIMUM_DELAY;
         }
 
-        state.consumePendingPenalty();
-        state.multiplier = calculateAimTimeMultiplier(character, weapon);
+        refreshRequirement(character, state);
         return state.getRemainingWork() <= MINIMUM_DELAY;
-    }
-
-    private static boolean isBeyondSightWithinPhysicalRange(float distance, float maximumSightRange) {
-        AccuracyScope scope = ACCURACY_SCOPE.get();
-        return scope.active
-            && distance > maximumSightRange
-            && distance <= scope.physicalRange + RANGE_EPSILON;
     }
 
     private static final class AimState {
         private final HandWeapon weapon;
         private final float baseDelay;
+        private float requiredWork;
         private float completedWork;
-        private float multiplier = 1.0F;
         private float workBeforeVanillaUpdate;
         private boolean updatePending;
+        private long targetKey;
+        private boolean targetInitialized;
         private float recoverablePenalty;
+        private long pendingPenaltyTargetKey;
         private float pendingPenalty;
         private float pendingPenaltyDistance = Float.MAX_VALUE;
         private boolean hasPendingPenalty;
@@ -279,32 +407,64 @@ public final class FirearmAimRuntime {
         private AimState(HandWeapon weapon, float baseDelay) {
             this.weapon = weapon;
             this.baseDelay = baseDelay;
+            this.requiredWork = baseDelay;
         }
 
         private float getEffectiveDelay() {
-            return Math.max(0.0F, this.baseDelay - this.completedWork / this.multiplier);
+            if (this.requiredWork <= MINIMUM_DELAY) {
+                return 0.0F;
+            }
+            return this.baseDelay * this.getRemainingWork() / this.requiredWork;
         }
 
         private float getRemainingWork() {
-            return Math.max(0.0F, this.baseDelay * this.multiplier - this.completedWork);
+            return Math.max(0.0F, this.requiredWork - this.completedWork);
         }
 
-        private void capturePendingPenalty(float distance, float penalty) {
+        private void applyRequirement(
+                long newTargetKey,
+                float newRequiredWork,
+                int aimingLevel,
+                float workRate) {
+            if (this.targetInitialized && this.targetKey != newTargetKey) {
+                float oldProgress = this.requiredWork > MINIMUM_DELAY
+                    ? clamp01(this.completedWork / this.requiredWork)
+                    : 0.0F;
+                float retainedProgress = oldProgress
+                    * calculateTargetProgressRetention(aimingLevel);
+                this.completedWork = newRequiredWork * retainedProgress;
+                float maximumCompletedWork = Math.max(
+                    0.0F,
+                    newRequiredWork - MINIMUM_TARGET_REACQUIRE_SECONDS * workRate
+                );
+                this.completedWork = Math.min(this.completedWork, maximumCompletedWork);
+            }
+
+            this.targetKey = newTargetKey;
+            this.targetInitialized = true;
+            this.requiredWork = newRequiredWork;
+            this.completedWork = Math.min(this.completedWork, this.requiredWork);
+        }
+
+        private void capturePendingPenalty(long targetKey, float distance, float penalty) {
             if (!this.hasPendingPenalty || distance < this.pendingPenaltyDistance - RANGE_EPSILON) {
+                this.pendingPenaltyTargetKey = targetKey;
                 this.pendingPenaltyDistance = distance;
                 this.pendingPenalty = penalty;
                 this.hasPendingPenalty = true;
-            } else if (Math.abs(distance - this.pendingPenaltyDistance) <= RANGE_EPSILON) {
+            } else if (targetKey == this.pendingPenaltyTargetKey
+                    && Math.abs(distance - this.pendingPenaltyDistance) <= RANGE_EPSILON) {
                 this.pendingPenalty = Math.max(this.pendingPenalty, penalty);
             }
         }
 
-        private void consumePendingPenalty() {
-            if (!this.hasPendingPenalty) {
-                return;
+        private void consumePendingPenalty(long currentTargetKey, boolean targetChanged) {
+            if (this.hasPendingPenalty && this.pendingPenaltyTargetKey == currentTargetKey) {
+                this.recoverablePenalty = this.pendingPenalty;
+            } else if (targetChanged) {
+                this.recoverablePenalty = 0.0F;
             }
 
-            this.recoverablePenalty = this.pendingPenalty;
             this.pendingPenalty = 0.0F;
             this.pendingPenaltyDistance = Float.MAX_VALUE;
             this.hasPendingPenalty = false;
@@ -317,8 +477,36 @@ public final class FirearmAimRuntime {
         private IsoGameCharacter owner;
         private HandWeapon weapon;
         private float physicalRange;
-        private boolean beyondSight;
+        private boolean hasTarget;
+        private long targetKey;
+        private boolean convertPenalties;
         private float targetDistance = Float.MAX_VALUE;
         private float recoverablePenalty;
+
+        private void reset() {
+            this.depth = 0;
+            this.active = false;
+            this.owner = null;
+            this.weapon = null;
+            this.physicalRange = 0.0F;
+            this.hasTarget = false;
+            this.targetKey = NO_TARGET_KEY;
+            this.convertPenalties = false;
+            this.targetDistance = Float.MAX_VALUE;
+            this.recoverablePenalty = 0.0F;
+        }
+    }
+
+    private static final class TargetProfile {
+        private static final TargetProfile NONE =
+            new TargetProfile(NO_TARGET_KEY, 0.0F);
+
+        private final long key;
+        private final float distance;
+
+        private TargetProfile(long key, float distance) {
+            this.key = key;
+            this.distance = distance;
+        }
     }
 }

@@ -1,0 +1,11 @@
+name=CJS Firearm Aiming Overhaul
+id=cjsFirearmAimingOverhaul
+description=Replaces permanent beyond-sight firearm inaccuracy with progressively longer stabilization time.
+poster=poster.png
+author=CJ Storrs
+modversion=0.1.0
+versionMin=42.19.0
+require=\ZombieBuddy
+javaJarFile=media/java/CJSFirearmAimingOverhaul.jar
+javaPkgName=com.cjstorrs.firearmaimingoverhaul
+ZBVersionMin=2.3.2

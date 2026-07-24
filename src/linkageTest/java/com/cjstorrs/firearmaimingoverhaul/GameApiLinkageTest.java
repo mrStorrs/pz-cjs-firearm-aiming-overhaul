@@ -115,7 +115,7 @@ public final class GameApiLinkageTest {
         requireMethod(runtime, "beforeAimingDelayUpdate", isoGameCharacter);
         requireMethod(runtime, "afterAimingDelayUpdate", isoGameCharacter);
         requireMethod(runtime, "synchronizePostShotDelay", isoPlayer);
-        requireMethod(runtime, "guaranteeFullyStabilizedHit", isoGameCharacter);
+        requireMethod(runtime, "promoteStabilizationHitChance", isoGameCharacter);
         requireMethod(runtime, "beginAccuracyCalculation", isoGameCharacter, handWeapon, hitInfo);
         requireMethod(runtime, "beginCriticalChanceCalculation", isoPlayer, isoGameCharacter);
         requireMethod(runtime, "endAccuracyCalculation");

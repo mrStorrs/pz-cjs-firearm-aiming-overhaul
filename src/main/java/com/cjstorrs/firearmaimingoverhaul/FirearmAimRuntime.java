@@ -85,17 +85,20 @@ public final class FirearmAimRuntime {
         player.setAimingDelay(state.getEffectiveDelay());
     }
 
-    public static void guaranteeFullyStabilizedHit(IsoGameCharacter character) {
+    public static void promoteStabilizationHitChance(IsoGameCharacter character) {
         if (!character.isAiming() || getAimedFirearm(character) == null) {
             return;
         }
 
         PZArrayList<HitInfo> hitInfoList = character.getHitInfoList();
-        if (hitInfoList == null || hitInfoList.isEmpty() || !isFullyStabilized(character)) {
+        if (hitInfoList == null || hitInfoList.isEmpty()) {
             return;
         }
 
-        hitInfoList.get(0).chance = 100;
+        hitInfoList.get(0).chance = calculatePromotedHitChance(
+            hitInfoList.get(0).chance,
+            getStabilizationProgress(character)
+        );
     }
 
     public static void beginAccuracyCalculation(
@@ -234,6 +237,20 @@ public final class FirearmAimRuntime {
     static float calculateRecoilReopenFraction(int aimingLevel) {
         return RECOIL_REOPEN_AT_LEVEL_ZERO
             - RECOIL_REOPEN_PER_LEVEL * clampAimingLevel(aimingLevel);
+    }
+
+    static int calculatePromotedHitChance(int vanillaChance, float progress) {
+        int clampedChance = Math.max(0, Math.min(100, vanillaChance));
+        float clampedProgress = clamp01(progress);
+        if (clampedChance == 100 || clampedProgress >= 1.0F) {
+            return 100;
+        }
+
+        float curvedProgress = clampedProgress * clampedProgress;
+        int promotedChance = Math.round(
+            clampedChance + (100 - clampedChance) * curvedProgress
+        );
+        return Math.min(99, promotedChance);
     }
 
     static float calculateExcessSightAcquisitionMultiplier(float excessSightTiles) {
@@ -403,15 +420,18 @@ public final class FirearmAimRuntime {
         return Math.max(0.0F, Math.min(1.0F, value));
     }
 
-    private static boolean isFullyStabilized(IsoGameCharacter character) {
+    private static float getStabilizationProgress(IsoGameCharacter character) {
         AimState state = AIM_STATES.get(character);
         HandWeapon weapon = getAimedFirearm(character);
         if (state == null || state.weapon != weapon) {
-            return character.getAimingDelay() <= MINIMUM_DELAY;
+            return character.getAimingDelay() <= MINIMUM_DELAY ? 1.0F : 0.0F;
         }
 
         refreshRequirement(character, state);
-        return state.getRemainingWork() <= MINIMUM_DELAY;
+        if (state.requiredWork <= MINIMUM_DELAY) {
+            return 1.0F;
+        }
+        return clamp01(state.completedWork / state.requiredWork);
     }
 
     private static final class AimState {

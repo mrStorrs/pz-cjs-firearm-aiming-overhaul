@@ -26,7 +26,7 @@ public final class FirearmAimingPatchTest {
         testTargetChangesRequireReacquisition();
         testDistanceChangesOnSameTargetPreserveWork();
         testRecoilReopensMinimumSpread();
-        testFullyStabilizedTargetIsGuaranteedToTakeDamage();
+        testStabilizationProgressesHitChanceToGuarantee();
         testAccuracyChangesAreScopedToValidTargets();
         testPatchMetadata();
         testZombieBuddyDiscovery();
@@ -356,28 +356,51 @@ public final class FirearmAimingPatchTest {
         checkClose(12.0F, player.getAimingDelay(), "stronger vanilla recoil remains authoritative");
     }
 
-    private static void testFullyStabilizedTargetIsGuaranteedToTakeDamage() {
+    private static void testStabilizationProgressesHitChanceToGuarantee() {
         resetRuntime();
         IsoPlayer player = createPlayer(15.0F, 0);
         HitInfo target = setTarget(player, 5.0F, new IsoMovingObject(1));
         target.chance = 20;
 
-        FirearmAimRuntime.guaranteeFullyStabilizedHit(player);
-        check(target.chance == 20, "unstabilized target must retain vanilla chance");
+        FirearmAimRuntime.promoteStabilizationHitChance(player);
+        check(target.chance == 20, "zero progress must retain vanilla chance");
 
-        runAimingUpdate(player, 56.25F);
-        FirearmAimRuntime.guaranteeFullyStabilizedHit(player);
+        runAimingUpdate(player, 28.125F);
+        target.chance = 20;
+        FirearmAimRuntime.promoteStabilizationHitChance(player);
+        check(target.chance == 40, "half progress must apply the quadratic chance curve");
+
+        runAimingUpdate(player, 28.125F);
+        target.chance = 20;
+        FirearmAimRuntime.promoteStabilizationHitChance(player);
         check(target.chance == 100, "fully stabilized primary target must be guaranteed");
 
         target = setTarget(player, 5.0F, new IsoMovingObject(2));
         target.chance = 20;
-        FirearmAimRuntime.guaranteeFullyStabilizedHit(player);
-        check(target.chance == 20, "guarantee must not transfer to another zombie");
+        FirearmAimRuntime.promoteStabilizationHitChance(player);
+        check(target.chance == 27, "new target must use only retained acquisition progress");
 
         player.setAiming(false);
         target.chance = 20;
-        FirearmAimRuntime.guaranteeFullyStabilizedHit(player);
-        check(target.chance == 20, "guarantee applies only while aiming");
+        FirearmAimRuntime.promoteStabilizationHitChance(player);
+        check(target.chance == 20, "chance promotion applies only while aiming");
+
+        check(
+            FirearmAimRuntime.calculatePromotedHitChance(20, 0.25F) == 25,
+            "quarter progress"
+        );
+        check(
+            FirearmAimRuntime.calculatePromotedHitChance(20, 0.75F) == 65,
+            "three-quarter progress"
+        );
+        check(
+            FirearmAimRuntime.calculatePromotedHitChance(99, 0.75F) == 99,
+            "promotion must not round up to a guarantee before full lock"
+        );
+        check(
+            FirearmAimRuntime.calculatePromotedHitChance(100, 0.25F) == 100,
+            "natural guarantees must remain guarantees"
+        );
     }
 
     private static void testAccuracyChangesAreScopedToValidTargets() {
@@ -457,7 +480,7 @@ public final class FirearmAimingPatchTest {
             "setAimingDelay"
         );
         assertPatchTarget(
-            FirearmAimingPatches.FullyStabilizedHitChance.class,
+            FirearmAimingPatches.StabilizationHitChance.class,
             "zombie.CombatManager",
             "calculateHitInfoList"
         );
@@ -564,7 +587,7 @@ public final class FirearmAimingPatchTest {
         List<Class<?>> expected = List.of(
             FirearmAimingPatches.AimingDelayUpdate.class,
             FirearmAimingPatches.PostShotAimingDelay.class,
-            FirearmAimingPatches.FullyStabilizedHitChance.class,
+            FirearmAimingPatches.StabilizationHitChance.class,
             FirearmAimingPatches.HitChanceCalculationScope.class,
             FirearmAimingPatches.CriticalChanceCalculationScope.class,
             FirearmAimingPatches.DistanceModifier.class,

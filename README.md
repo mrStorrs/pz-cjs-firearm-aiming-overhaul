@@ -27,9 +27,10 @@ acquisition time.
   Vanilla recoil remains authoritative when it opens the crosshair farther.
 - If effective sight exceeds physical maximum range, normal acquisition is
   accelerated by 2% per excess sight tile, capped at a 20% speed bonus.
-- Once all work for the current target is complete, its primary hit chance is
-  promoted to 100. The smallest crosshair therefore guarantees a damaging
-  hit rather than hiding another accuracy roll.
+- The primary target's real hit chance grows toward 100 along a late-biased
+  quadratic curve as stabilization work completes. This visibly tightens the
+  crosshair throughout acquisition without over-rewarding a quick partial
+  aim. Full stabilization still guarantees a damaging hit.
 - Project Zomboid's ballistics controller already records the body part under
   the cursor. A damaging shot over the head uses vanilla's targeted head-shot
   path.
@@ -133,6 +134,20 @@ maps that progress back to the ordinary aiming-delay scale used by hit chance
 and the reticle. This preserves Aiming and Marksman work-speed effects while
 allowing a long balance timer without inflating weapon script values.
 
+The primary target's resulting vanilla chance is also promoted toward the
+guaranteed full-lock chance:
+
+```text
+progress = completed work / required work
+promoted chance =
+  vanilla chance + (100 - vanilla chance) * progress ^ 2
+```
+
+The quadratic curve keeps early partial shots close to vanilla accuracy while
+making the crosshair visibly tighten as the target lock matures. A promotion
+below complete progress is capped at 99, so only full stabilization—or a
+natural vanilla 100—receives the mod's guarantee.
+
 Target identity comes from the primary `HitInfo` object's stable moving-object
 ID. Changing distance on the same zombie preserves absolute work; changing
 zombies applies the retention and minimum-reacquisition rules.
@@ -189,6 +204,7 @@ Enable `ZombieBuddy`, then `cjsFirearmAimingOverhaul`.
    and confirm invested work is retained.
 6. Fire after full stabilization and confirm recoil visibly reopens the
    crosshair, with Aiming skill reducing but not eliminating recovery.
-7. Confirm a fully stabilized shot always damages the current primary target,
-   and that putting the cursor over its head uses the targeted head-hit path.
+7. Confirm the crosshair tightens throughout acquisition, a fully stabilized
+   shot always damages the current primary target, and putting the cursor over
+   its head uses the targeted head-hit path.
 8. Repeat the range and target-change checks with a Simple Bows bow.

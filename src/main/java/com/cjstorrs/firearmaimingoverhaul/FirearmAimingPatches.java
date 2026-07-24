@@ -32,10 +32,10 @@ public final class FirearmAimingPatches {
     }
 
     @Patch(className = "zombie.CombatManager", methodName = "calculateHitInfoList")
-    public static final class FullyStabilizedHitChance {
+    public static final class StabilizationHitChance {
         @Patch.OnExit
         public static void exit(@Patch.Argument(0) IsoGameCharacter owner) {
-            FirearmAimRuntime.guaranteeFullyStabilizedHit(owner);
+            FirearmAimRuntime.promoteStabilizationHitChance(owner);
         }
     }
 

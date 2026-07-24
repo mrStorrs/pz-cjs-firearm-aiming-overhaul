@@ -3,12 +3,15 @@ package com.cjstorrs.firearmaimingoverhaul;
 import zombie.SandboxOptions;
 
 public final class FirearmAimSettings {
-    public static final double DEFAULT_MAXIMUM_FAR_EXTRA_SECONDS = 5.0;
+    public static final double DEFAULT_MAXIMUM_CLEAN_AIM_SECONDS = 4.0;
+    public static final double DEFAULT_MAXIMUM_CONDITION_SECONDS = 4.0;
     public static final double DEFAULT_FAR_PROGRESS_EXPONENT = 1.25;
     public static final double DEFAULT_REFERENCE_GAP_TILES = 10.0;
 
-    private static final String MAXIMUM_FAR_EXTRA_SECONDS_OPTION =
-        "CJSFirearmAimingOverhaul.MaximumAimTimeMultiplier";
+    private static final String MAXIMUM_CLEAN_AIM_SECONDS_OPTION =
+        "CJSFirearmAimingOverhaul.MaximumCleanAimSeconds";
+    private static final String MAXIMUM_CONDITION_SECONDS_OPTION =
+        "CJSFirearmAimingOverhaul.MaximumConditionSeconds";
     private static final String FAR_PROGRESS_EXPONENT_OPTION =
         "CJSFirearmAimingOverhaul.CurveExponent";
     private static final String REFERENCE_GAP_TILES_OPTION =
@@ -17,10 +20,19 @@ public final class FirearmAimSettings {
     private FirearmAimSettings() {
     }
 
-    public static float getMaximumFarExtraSeconds() {
+    public static float getMaximumCleanAimSeconds() {
         return readDoubleOption(
-            MAXIMUM_FAR_EXTRA_SECONDS_OPTION,
-            DEFAULT_MAXIMUM_FAR_EXTRA_SECONDS,
+            MAXIMUM_CLEAN_AIM_SECONDS_OPTION,
+            DEFAULT_MAXIMUM_CLEAN_AIM_SECONDS,
+            1.0,
+            12.0
+        );
+    }
+
+    public static float getMaximumConditionSeconds() {
+        return readDoubleOption(
+            MAXIMUM_CONDITION_SECONDS_OPTION,
+            DEFAULT_MAXIMUM_CONDITION_SECONDS,
             0.0,
             12.0
         );

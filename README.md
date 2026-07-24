@@ -9,15 +9,17 @@ acquisition time.
 - Every aimed firearm has a minimum target-lock time. Aiming 0 starts at 1.5
   seconds, Aiming 5 at 1.1 seconds, and Aiming 10 at 0.7 seconds. A weapon's
   vanilla aiming time still wins when it is longer.
-- Targets beyond effective sight add a normalized far-range surcharge. The
-  surcharge follows progress through that weapon's live sight-to-maximum
-  gap, so a long rifle gap is not punished once per absolute tile.
-- A small sight-to-maximum gap receives a softer maximum surcharge. A gap of
-  ten tiles receives full weight; larger gaps use the same normalized curve.
+- Targets beyond effective sight follow a normalized clean-acquisition curve
+  toward a skill-scaled ceiling: 4 seconds at Aiming 0, 3.5 seconds at
+  Aiming 5, and 3 seconds at Aiming 10.
+- The curve follows progress through that weapon's live sight-to-maximum gap,
+  so a long rifle gap is not punished once per absolute tile. A small gap
+  receives a softer maximum; a gap of ten tiles receives full weight.
 - Recoverable penalties from recent movement, arm pain, moodles,
   darkness/weather, and vision-restricting headgear become additional
   stabilization time at every range instead of imposing a permanent spread
-  floor.
+  floor. Forty combined penalty points reaches a skill-scaled cap: 4 seconds
+  at Aiming 0, 3.25 seconds at Aiming 5, and 2.5 seconds at Aiming 10.
 - Aiming at a different zombie retains `30% + 4% per Aiming level` of the
   progress earned on the previous target. Every change still requires at
   least 0.35 seconds of reacquisition.
@@ -47,41 +49,59 @@ minimum lock seconds = 1.5 - 0.08 * Aiming
 base work = max(vanilla weapon work, minimum lock seconds converted to work)
 ```
 
-The far-range surcharge is:
+The clean acquisition curve is:
 
 ```text
 gap = physicalMaxRange - effectiveSightRange
 progress = clamp((targetDistance - effectiveSightRange) / gap, 0, 1)
 gapWeight = sqrt(min(1, gap / referenceGap))
+maximumCleanSeconds = configuredMaximum * (1 - 0.025 * Aiming)
+availableFarSeconds =
+  max(0, maximumCleanSeconds - baseSeconds) * gapWeight
+entrySeconds =
+  min(availableFarSeconds, 0.5 - 0.02 * Aiming)
 
-far surcharge seconds =
-  (1 + maximumExtraSeconds * gapWeight * progress ^ curveExponent)
-  * (1.25 - 0.045 * Aiming)
+clean seconds =
+  baseSeconds
+  + entrySeconds
+  + max(0, availableFarSeconds - entrySeconds)
+    * progress ^ curveExponent
 ```
 
-With the defaults (`maximumExtraSeconds = 5`, `curveExponent = 1.25`,
-`referenceGap = 10`), maximum-range results are:
+Inside effective sight, clean acquisition remains `baseSeconds`. Crossing
+beyond sight adds the 0.3-to-0.5-second entry cost, then the progressive
+portion grows toward the gap-weighted ceiling. A slow weapon whose vanilla
+base already exceeds the configured ceiling keeps its vanilla time.
 
-| Live sight-to-maximum gap | Raw maximum surcharge | Aiming 0 | Aiming 10 |
+With the defaults (`configuredMaximum = 4`, `curveExponent = 1.25`,
+`referenceGap = 10`), maximum-range clean acquisition for a fast weapon is:
+
+| Live sight-to-maximum gap | Aiming 0 | Aiming 5 | Aiming 10 |
 | ---: | ---: | ---: | ---: |
-| 2 tiles | 3.24 s | 4.05 s | 2.59 s |
-| 5 tiles | 4.54 s | 5.67 s | 3.63 s |
-| 8 tiles | 5.47 s | 6.83 s | 4.37 s |
-| 10+ tiles | 6.00 s | 7.50 s | 4.80 s |
+| 2 tiles | 2.62 s | 2.17 s | 1.73 s |
+| 5 tiles | 3.27 s | 2.80 s | 2.33 s |
+| 8 tiles | 3.74 s | 3.25 s | 2.76 s |
+| 10+ tiles | 4.00 s | 3.50 s | 3.00 s |
 
-Those values are surcharges on top of normal acquisition. For a fast weapon
-at a full-weight maximum range, total lock time is therefore approximately
-9.0 seconds at Aiming 0 and 5.5 seconds at Aiming 10. A slow weapon can take
-longer.
-
-Each recovered accuracy point adds:
+The condition delay is:
 
 ```text
-seconds per point = 0.04 - 0.0015 * Aiming
+maximumConditionSeconds =
+  configuredConditionMaximum * (1 - 0.0375 * Aiming)
+conditionSeconds =
+  maximumConditionSeconds * min(1, recoveredPenaltyPoints / 40)
 ```
 
-Twenty-five condition-penalty points therefore add 1.0 second at Aiming 0,
-0.81 seconds at Aiming 5, and 0.625 seconds at Aiming 10.
+| Recovered penalty points | Aiming 0 | Aiming 5 | Aiming 10 |
+| ---: | ---: | ---: | ---: |
+| 10 | +1.00 s | +0.81 s | +0.63 s |
+| 25 | +2.50 s | +2.03 s | +1.56 s |
+| 40 or more | +4.00 s | +3.25 s | +2.50 s |
+
+At a full-weight maximum range, clean aim plus maximum conditions can
+therefore reach 8 seconds at Aiming 0, 6.75 seconds at Aiming 5, and 5.5
+seconds at Aiming 10. Firing before full lock remains possible; these totals
+are the time required for the guaranteed fully stabilized shot.
 
 When sight exceeds physical range:
 
@@ -123,16 +143,17 @@ minimum reopening. The larger reopening wins.
 
 ## Sandbox Settings
 
-The three balance controls are under
+The four balance controls are under
 **Sandbox > CJS Firearm Aiming Overhaul**:
 
-- **Maximum Far-Aim Extra Seconds** defaults to 5.
+- **Maximum Clean Aim Seconds** defaults to 4.
+- **Maximum Condition Seconds** defaults to 4.
 - **Far-Range Progress Curve** defaults to 1.25.
 - **Reference Range Gap** defaults to 10 tiles.
 
-The internal option IDs are unchanged from v1.4 so existing saves remain
-compatible. Existing saves also retain their previously stored numeric
-values; the new recommended values can be selected in the sandbox settings.
+Version 1.6 replaces the old maximum-extra-seconds option with the explicit
+clean and condition maximums. If a save has not stored the new options yet,
+the runtime uses the new four-second defaults.
 
 ## Build
 

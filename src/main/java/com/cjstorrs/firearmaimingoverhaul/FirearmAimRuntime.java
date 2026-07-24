@@ -18,8 +18,11 @@ public final class FirearmAimRuntime {
     private static final float VANILLA_WORK_PER_SECOND = 37.5F;
     private static final float MINIMUM_LOCK_SECONDS_AT_LEVEL_ZERO = 1.5F;
     private static final float MINIMUM_LOCK_SECONDS_PER_LEVEL = 0.08F;
-    private static final float CONDITION_SECONDS_PER_POINT_AT_LEVEL_ZERO = 0.04F;
-    private static final float CONDITION_SECONDS_PER_POINT_PER_LEVEL = 0.0015F;
+    private static final float CLEAN_MAXIMUM_SKILL_REDUCTION_PER_LEVEL = 0.025F;
+    private static final float FAR_ENTRY_SECONDS_AT_LEVEL_ZERO = 0.5F;
+    private static final float FAR_ENTRY_SECONDS_PER_LEVEL = 0.02F;
+    private static final float FULL_CONDITION_PENALTY_POINTS = 40.0F;
+    private static final float CONDITION_MAXIMUM_SKILL_REDUCTION_PER_LEVEL = 0.0375F;
     private static final float TARGET_PROGRESS_RETENTION_AT_LEVEL_ZERO = 0.30F;
     private static final float TARGET_PROGRESS_RETENTION_PER_LEVEL = 0.04F;
     private static final float MINIMUM_TARGET_REACQUIRE_SECONDS = 0.35F;
@@ -206,9 +209,21 @@ public final class FirearmAimRuntime {
             - MINIMUM_LOCK_SECONDS_PER_LEVEL * clampAimingLevel(aimingLevel);
     }
 
-    static float calculateConditionSecondsPerPoint(int aimingLevel) {
-        return CONDITION_SECONDS_PER_POINT_AT_LEVEL_ZERO
-            - CONDITION_SECONDS_PER_POINT_PER_LEVEL * clampAimingLevel(aimingLevel);
+    static float calculateMaximumCleanAimSeconds(int aimingLevel) {
+        return FirearmAimSettings.getMaximumCleanAimSeconds()
+            * (1.0F - CLEAN_MAXIMUM_SKILL_REDUCTION_PER_LEVEL
+                * clampAimingLevel(aimingLevel));
+    }
+
+    static float calculateMaximumConditionSeconds(int aimingLevel) {
+        return FirearmAimSettings.getMaximumConditionSeconds()
+            * (1.0F - CONDITION_MAXIMUM_SKILL_REDUCTION_PER_LEVEL
+                * clampAimingLevel(aimingLevel));
+    }
+
+    static float calculateConditionSeconds(int aimingLevel, float penaltyPoints) {
+        return calculateMaximumConditionSeconds(aimingLevel)
+            * clamp01(Math.max(0.0F, penaltyPoints) / FULL_CONDITION_PENALTY_POINTS);
     }
 
     static float calculateTargetProgressRetention(int aimingLevel) {
@@ -228,26 +243,34 @@ public final class FirearmAimRuntime {
         );
     }
 
-    static float calculateFarAimSeconds(
+    static float calculateCleanAimSeconds(
             int aimingLevel,
+            float baseSeconds,
             float targetDistance,
             float sightRange,
             float physicalRange) {
         float gap = physicalRange - sightRange;
         if (gap <= RANGE_EPSILON || targetDistance <= sightRange) {
-            return 0.0F;
+            return baseSeconds;
         }
 
         float progress = clamp01((targetDistance - sightRange) / gap);
         float gapWeight = (float)Math.sqrt(
             Math.min(1.0F, gap / FirearmAimSettings.getReferenceGapTiles())
         );
-        float rawSeconds = 1.0F
-            + FirearmAimSettings.getMaximumFarExtraSeconds()
-                * gapWeight
-                * (float)Math.pow(progress, FirearmAimSettings.getFarProgressExponent());
-        float skillMultiplier = 1.25F - 0.045F * clampAimingLevel(aimingLevel);
-        return rawSeconds * skillMultiplier;
+        float maximumCleanSeconds = Math.max(
+            baseSeconds,
+            calculateMaximumCleanAimSeconds(aimingLevel)
+        );
+        float availableFarSeconds = (maximumCleanSeconds - baseSeconds) * gapWeight;
+        float entrySeconds = Math.min(
+            availableFarSeconds,
+            FAR_ENTRY_SECONDS_AT_LEVEL_ZERO
+                - FAR_ENTRY_SECONDS_PER_LEVEL * clampAimingLevel(aimingLevel)
+        );
+        float progressiveSeconds = Math.max(0.0F, availableFarSeconds - entrySeconds)
+            * (float)Math.pow(progress, FirearmAimSettings.getFarProgressExponent());
+        return baseSeconds + entrySeconds + progressiveSeconds;
     }
 
     static float calculateRequiredAimWork(IsoGameCharacter character, HandWeapon weapon) {
@@ -300,16 +323,18 @@ public final class FirearmAimRuntime {
             baseWork *= calculateExcessSightAcquisitionMultiplier(sightRange - physicalRange);
         }
 
-        float farWork = calculateFarAimSeconds(
+        float cleanWork = calculateCleanAimSeconds(
             aimingLevel,
+            baseWork / workRate,
             target.distance,
             sightRange,
             physicalRange
         ) * workRate;
-        float conditionWork = state.recoverablePenalty
-            * calculateConditionSecondsPerPoint(aimingLevel)
-            * workRate;
-        float requiredWork = Math.max(MINIMUM_DELAY, baseWork + farWork + conditionWork);
+        float conditionWork = calculateConditionSeconds(
+            aimingLevel,
+            state.recoverablePenalty
+        ) * workRate;
+        float requiredWork = Math.max(MINIMUM_DELAY, cleanWork + conditionWork);
         state.applyRequirement(target.key, requiredWork, aimingLevel, workRate);
     }
 

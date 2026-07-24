@@ -1,7 +1,9 @@
 {
   "Sandbox_CJSFirearmAimingOverhaul": "CJS Firearm Aiming Overhaul",
-  "Sandbox_CJSFirearmAimingOverhaul_MaximumAimTimeMultiplier": "Maximum Far-Aim Extra Seconds",
-  "Sandbox_CJSFirearmAimingOverhaul_MaximumAimTimeMultiplier_tooltip": "Extra seconds used by the normalized far-range curve at a full-weight range gap. The curve also has a one-second entry cost and is scaled by Aiming skill. Default: 5.0.",
+  "Sandbox_CJSFirearmAimingOverhaul_MaximumCleanAimSeconds": "Maximum Clean Aim Seconds",
+  "Sandbox_CJSFirearmAimingOverhaul_MaximumCleanAimSeconds_tooltip": "Maximum total clean acquisition time at Aiming 0 for a full-weight sight-to-range gap. Aiming skill lowers this ceiling, and smaller gaps receive a softer ceiling. Default: 4.0 seconds.",
+  "Sandbox_CJSFirearmAimingOverhaul_MaximumConditionSeconds": "Maximum Condition Seconds",
+  "Sandbox_CJSFirearmAimingOverhaul_MaximumConditionSeconds_tooltip": "Maximum extra stabilization time at Aiming 0 from combined movement, pain, moodle, weather, light, and vision penalties. Forty recovered penalty points reaches the cap, and Aiming skill lowers it. Default: 4.0 seconds.",
   "Sandbox_CJSFirearmAimingOverhaul_CurveExponent": "Far-Range Progress Curve",
   "Sandbox_CJSFirearmAimingOverhaul_CurveExponent_tooltip": "Controls how quickly extra time grows as the target moves from effective sight to physical maximum range. Higher values are gentler near sight range and steeper near maximum range. Default: 1.25.",
   "Sandbox_CJSFirearmAimingOverhaul_FullPenaltyDistanceTiles": "Reference Range Gap",

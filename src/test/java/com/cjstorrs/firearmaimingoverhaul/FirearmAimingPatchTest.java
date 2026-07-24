@@ -36,9 +36,14 @@ public final class FirearmAimingPatchTest {
     private static void testHybridCurveDefaultsAndConfiguration() {
         resetRuntime();
         checkClose(
-            5.0F,
-            FirearmAimSettings.getMaximumFarExtraSeconds(),
-            "default maximum far extra seconds"
+            4.0F,
+            FirearmAimSettings.getMaximumCleanAimSeconds(),
+            "default maximum clean aim seconds"
+        );
+        checkClose(
+            4.0F,
+            FirearmAimSettings.getMaximumConditionSeconds(),
+            "default maximum condition seconds"
         );
         checkClose(
             1.25F,
@@ -52,8 +57,12 @@ public final class FirearmAimingPatchTest {
         );
 
         SandboxOptions.instance.setOptionForTest(
-            "CJSFirearmAimingOverhaul.MaximumAimTimeMultiplier",
+            "CJSFirearmAimingOverhaul.MaximumCleanAimSeconds",
             new SandboxOptions.DoubleSandboxOption(6.0)
+        );
+        SandboxOptions.instance.setOptionForTest(
+            "CJSFirearmAimingOverhaul.MaximumConditionSeconds",
+            new SandboxOptions.DoubleSandboxOption(3.0)
         );
         SandboxOptions.instance.setOptionForTest(
             "CJSFirearmAimingOverhaul.CurveExponent",
@@ -63,38 +72,55 @@ public final class FirearmAimingPatchTest {
             "CJSFirearmAimingOverhaul.FullPenaltyDistanceTiles",
             new SandboxOptions.DoubleSandboxOption(5.0)
         );
-        checkClose(6.0F, FirearmAimSettings.getMaximumFarExtraSeconds(), "configured far seconds");
+        checkClose(6.0F, FirearmAimSettings.getMaximumCleanAimSeconds(), "configured clean seconds");
+        checkClose(3.0F, FirearmAimSettings.getMaximumConditionSeconds(), "configured condition seconds");
         checkClose(2.0F, FirearmAimSettings.getFarProgressExponent(), "configured exponent");
         checkClose(5.0F, FirearmAimSettings.getReferenceGapTiles(), "configured reference gap");
     }
 
     private static void testHybridCurveNormalizesWeaponGap() {
         resetRuntime();
+        checkClose(4.0F, FirearmAimRuntime.calculateMaximumCleanAimSeconds(0),
+            "aiming-zero clean cap");
+        checkClose(3.5F, FirearmAimRuntime.calculateMaximumCleanAimSeconds(5),
+            "aiming-five clean cap");
+        checkClose(3.0F, FirearmAimRuntime.calculateMaximumCleanAimSeconds(10),
+            "aiming-ten clean cap");
 
         checkClose(
-            3.8778F,
-            FirearmAimRuntime.calculateFarAimSeconds(0, 11.0F, 6.0F, 16.0F),
+            2.8409F,
+            FirearmAimRuntime.calculateCleanAimSeconds(0, 1.5F, 11.0F, 6.0F, 16.0F),
             "halfway through a ten-tile gap"
         );
         checkClose(
-            3.8778F,
-            FirearmAimRuntime.calculateFarAimSeconds(0, 16.0F, 6.0F, 26.0F),
+            2.8409F,
+            FirearmAimRuntime.calculateCleanAimSeconds(0, 1.5F, 16.0F, 6.0F, 26.0F),
             "halfway through a twenty-tile rifle gap"
         );
         checkClose(
-            4.0451F,
-            FirearmAimRuntime.calculateFarAimSeconds(0, 8.0F, 6.0F, 8.0F),
+            2.6180F,
+            FirearmAimRuntime.calculateCleanAimSeconds(0, 1.5F, 8.0F, 6.0F, 8.0F),
             "maximum of a two-tile gap"
         );
         checkClose(
-            7.5F,
-            FirearmAimRuntime.calculateFarAimSeconds(0, 16.0F, 6.0F, 16.0F),
+            4.0F,
+            FirearmAimRuntime.calculateCleanAimSeconds(0, 1.5F, 16.0F, 6.0F, 16.0F),
             "maximum of a ten-tile gap at aiming zero"
         );
         checkClose(
-            4.8F,
-            FirearmAimRuntime.calculateFarAimSeconds(10, 16.0F, 6.0F, 16.0F),
+            3.0F,
+            FirearmAimRuntime.calculateCleanAimSeconds(10, 0.7F, 16.0F, 6.0F, 16.0F),
             "maximum of a ten-tile gap at aiming ten"
+        );
+        checkClose(
+            2.0F,
+            FirearmAimRuntime.calculateCleanAimSeconds(0, 2.0F, 5.0F, 6.0F, 16.0F),
+            "inside sight keeps base acquisition"
+        );
+        checkClose(
+            5.0F,
+            FirearmAimRuntime.calculateCleanAimSeconds(0, 5.0F, 16.0F, 6.0F, 16.0F),
+            "slow vanilla acquisition remains authoritative"
         );
     }
 
@@ -143,13 +169,13 @@ public final class FirearmAimingPatchTest {
         setTarget(player, 16.0F, new IsoMovingObject(1));
 
         checkClose(
-            337.5F,
+            150.0F,
             FirearmAimRuntime.calculateRequiredAimWork(player, weapon),
             "aiming-zero maximum-range work"
         );
         runAimingUpdate(player, 56.25F);
         check(player.getAimingDelay() > 0.0F, "inside-range floor alone must not finish far aim");
-        runAimingUpdate(player, 281.25F);
+        runAimingUpdate(player, 93.75F);
         checkClose(0.0F, player.getAimingDelay(), "maximum-range aim must eventually finish");
 
         resetRuntime();
@@ -158,7 +184,7 @@ public final class FirearmAimingPatchTest {
         weapon.setMaxRange(16.0F);
         setTarget(player, 16.0F, new IsoMovingObject(1));
         checkClose(
-            309.375F,
+            168.75F,
             FirearmAimRuntime.calculateRequiredAimWork(player, weapon),
             "aiming-ten maximum-range work"
         );
@@ -223,25 +249,29 @@ public final class FirearmAimingPatchTest {
         );
         FirearmAimRuntime.endAccuracyCalculation();
 
+        checkClose(4.0F, FirearmAimRuntime.calculateMaximumConditionSeconds(0),
+            "aiming-zero condition cap");
+        checkClose(3.25F, FirearmAimRuntime.calculateMaximumConditionSeconds(5),
+            "aiming-five condition cap");
+        checkClose(2.5F, FirearmAimRuntime.calculateMaximumConditionSeconds(10),
+            "aiming-ten condition cap");
+        checkClose(2.5F, FirearmAimRuntime.calculateConditionSeconds(0, 25.0F),
+            "twenty-five condition points at aiming zero");
+        checkClose(1.5625F, FirearmAimRuntime.calculateConditionSeconds(10, 25.0F),
+            "twenty-five condition points at aiming ten");
+        checkClose(4.0F, FirearmAimRuntime.calculateConditionSeconds(0, 100.0F),
+            "condition time is capped at aiming zero");
+        checkClose(2.5F, FirearmAimRuntime.calculateConditionSeconds(10, 100.0F),
+            "condition time is capped at aiming ten");
         checkClose(
-            0.04F,
-            FirearmAimRuntime.calculateConditionSecondsPerPoint(0),
-            "aiming-zero condition time"
-        );
-        checkClose(
-            0.025F,
-            FirearmAimRuntime.calculateConditionSecondsPerPoint(10),
-            "aiming-ten condition time"
-        );
-        checkClose(
-            93.75F,
+            150.0F,
             FirearmAimRuntime.calculateRequiredAimWork(player, weapon),
-            "twenty-five penalty points add one second at aiming zero"
+            "twenty-five penalty points add two and a half seconds at aiming zero"
         );
 
         runAimingUpdate(player, 56.25F);
-        checkClose(6.0F, player.getAimingDelay(), "conditions must keep stabilization open");
-        runAimingUpdate(player, 37.5F);
+        checkClose(9.375F, player.getAimingDelay(), "conditions must keep stabilization open");
+        runAimingUpdate(player, 93.75F);
         checkClose(0.0F, player.getAimingDelay(), "condition work must remain recoverable");
     }
 
@@ -289,7 +319,7 @@ public final class FirearmAimingPatchTest {
 
         setTarget(player, 16.0F, target);
         runAimingUpdate(player, 0.0F);
-        checkClose(12.5F, player.getAimingDelay(), "moving the same target farther reopens spread");
+        checkClose(9.375F, player.getAimingDelay(), "moving the same target farther reopens spread");
 
         setTarget(player, 5.0F, target);
         runAimingUpdate(player, 0.0F);

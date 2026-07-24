@@ -33,4 +33,16 @@ public class SandboxOptions {
             return this.value;
         }
     }
+
+    public static class BooleanSandboxOption implements SandboxOption {
+        private final boolean value;
+
+        public BooleanSandboxOption(boolean value) {
+            this.value = value;
+        }
+
+        public boolean getValue() {
+            return this.value;
+        }
+    }
 }

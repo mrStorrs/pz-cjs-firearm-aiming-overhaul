@@ -13,6 +13,7 @@ public final class GameApiLinkageTest {
         Class<?> isoPlayer = load(loader, "zombie.characters.IsoPlayer");
         Class<?> perk = load(loader, "zombie.characters.skills.PerkFactory$Perk");
         Class<?> perks = load(loader, "zombie.characters.skills.PerkFactory$Perks");
+        Class<?> inventoryItem = load(loader, "zombie.inventory.InventoryItem");
         Class<?> handWeapon = load(loader, "zombie.inventory.types.HandWeapon");
         Class<?> hitInfo = load(loader, "zombie.network.fields.hit.HitInfo");
         Class<?> isoMovingObject = load(loader, "zombie.iso.IsoMovingObject");
@@ -122,6 +123,7 @@ public final class GameApiLinkageTest {
             requireMethod(handWeapon, "getRangeMod", isoGameCharacter).getReturnType() == float.class,
             "range modifier return type"
         );
+        check(requireMethod(inventoryItem, "getFullType").getReturnType() == String.class, "weapon full type");
         hitInfo.getField("distSq");
         check(hitInfo.getField("chance").getType() == int.class, "hit chance field type");
         check(requireMethod(hitInfo, "getObject").getReturnType() == isoMovingObject, "hit object return type");
@@ -138,11 +140,16 @@ public final class GameApiLinkageTest {
         Class<?> sandboxOptions = load(loader, "zombie.SandboxOptions");
         Class<?> sandboxOption = load(loader, "zombie.SandboxOptions$SandboxOption");
         Class<?> doubleSandboxOption = load(loader, "zombie.SandboxOptions$DoubleSandboxOption");
+        Class<?> booleanSandboxOption = load(loader, "zombie.SandboxOptions$BooleanSandboxOption");
         check(
             requireMethod(sandboxOptions, "getOptionByName", String.class).getReturnType() == sandboxOption,
             "sandbox option return type"
         );
         check(doubleSandboxOption.getMethod("getValue").getReturnType() == double.class, "double sandbox value type");
+        check(
+            booleanSandboxOption.getMethod("getValue").getReturnType() == boolean.class,
+            "boolean sandbox value type"
+        );
 
         Class<?> runtime = load(loader, "com.cjstorrs.firearmaimingoverhaul.FirearmAimRuntime");
         requireMethod(runtime, "beforeAimingDelayUpdate", isoGameCharacter);

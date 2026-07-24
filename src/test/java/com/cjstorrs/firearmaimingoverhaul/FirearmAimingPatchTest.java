@@ -1,7 +1,10 @@
 package com.cjstorrs.firearmaimingoverhaul;
 
+import java.io.ByteArrayOutputStream;
+import java.io.PrintStream;
 import java.lang.reflect.Method;
 import java.lang.reflect.Parameter;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import me.zed_0xff.zombie_buddy.Patch;
 import me.zed_0xff.zombie_buddy.PatchEngine;
@@ -29,6 +32,7 @@ public final class FirearmAimingPatchTest {
         testRecoilReopensMinimumSpread();
         testStabilizationProgressesHitChanceToGuarantee();
         testFullyStabilizedTargetedHeadshotsAreLethal();
+        testHeadshotDiagnosticsExplainDecision();
         testAccuracyChangesAreScopedToValidTargets();
         testPatchMetadata();
         testZombieBuddyDiscovery();
@@ -37,6 +41,7 @@ public final class FirearmAimingPatchTest {
 
     private static void testHybridCurveDefaultsAndConfiguration() {
         resetRuntime();
+        SandboxOptions.instance.clearOptionsForTest();
         checkClose(
             4.0F,
             FirearmAimSettings.getMaximumCleanAimSeconds(),
@@ -57,6 +62,10 @@ public final class FirearmAimingPatchTest {
             FirearmAimSettings.getReferenceGapTiles(),
             "default reference gap"
         );
+        check(
+            FirearmAimSettings.isHeadshotDiagnosticLoggingEnabled(),
+            "headshot diagnostics must default on"
+        );
 
         SandboxOptions.instance.setOptionForTest(
             "CJSFirearmAimingOverhaul.MaximumCleanAimSeconds",
@@ -74,10 +83,18 @@ public final class FirearmAimingPatchTest {
             "CJSFirearmAimingOverhaul.FullPenaltyDistanceTiles",
             new SandboxOptions.DoubleSandboxOption(5.0)
         );
+        SandboxOptions.instance.setOptionForTest(
+            "CJSFirearmAimingOverhaul.HeadshotDiagnosticLogging",
+            new SandboxOptions.BooleanSandboxOption(false)
+        );
         checkClose(6.0F, FirearmAimSettings.getMaximumCleanAimSeconds(), "configured clean seconds");
         checkClose(3.0F, FirearmAimSettings.getMaximumConditionSeconds(), "configured condition seconds");
         checkClose(2.0F, FirearmAimSettings.getFarProgressExponent(), "configured exponent");
         checkClose(5.0F, FirearmAimSettings.getReferenceGapTiles(), "configured reference gap");
+        check(
+            !FirearmAimSettings.isHeadshotDiagnosticLoggingEnabled(),
+            "configured headshot diagnostics"
+        );
     }
 
     private static void testHybridCurveNormalizesWeaponGap() {
@@ -572,6 +589,80 @@ public final class FirearmAimingPatchTest {
         FirearmAimRuntime.endShot();
     }
 
+    private static void testHeadshotDiagnosticsExplainDecision() {
+        resetRuntime();
+        SandboxOptions.instance.setOptionForTest(
+            "CJSFirearmAimingOverhaul.HeadshotDiagnosticLogging",
+            new SandboxOptions.BooleanSandboxOption(true)
+        );
+        IsoPlayer player = createPlayer(15.0F, 0);
+        HandWeapon weapon = (HandWeapon)player.getPrimaryHandItem();
+        weapon.setFullType("Base.DiagnosticPistol");
+        IsoGameCharacter zombie = new IsoGameCharacter();
+        zombie.setZombie(true);
+        zombie.setHealth(2.0F);
+        setTarget(player, 5.0F, zombie);
+        runAimingUpdate(player, 56.25F);
+
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+        PrintStream originalOut = System.out;
+        System.setOut(new PrintStream(output, true, StandardCharsets.UTF_8));
+        try {
+            FirearmAimRuntime.captureShotStabilization(player, weapon);
+            FirearmAimRuntime.recordTargetedBodyPart(
+                player,
+                weapon,
+                zombie,
+                RagdollBodyPart.BODYPART_SPINE.ordinal()
+            );
+            checkClose(
+                0.4F,
+                FirearmAimRuntime.guaranteeLethalHeadshotDamage(
+                    zombie,
+                    weapon,
+                    player,
+                    false,
+                    0.4F
+                ),
+                "diagnostic spine shot must retain ordinary damage"
+            );
+            FirearmAimRuntime.endShot();
+        } finally {
+            System.setOut(originalOut);
+        }
+
+        String diagnostic = output.toString(StandardCharsets.UTF_8);
+        checkContains(diagnostic, "event=shot_capture", "shot capture diagnostic");
+        checkContains(diagnostic, "weapon=Base.DiagnosticPistol", "diagnostic weapon type");
+        checkContains(diagnostic, "progress=1.000", "diagnostic stabilization");
+        checkContains(diagnostic, "bodyPart=BODYPART_SPINE", "diagnostic body part");
+        checkContains(diagnostic, "result=rejected_body_not_head", "body-part rejection");
+        checkContains(
+            diagnostic,
+            "result=rejected_no_accepted_head_marker",
+            "damage rejection"
+        );
+        checkContains(diagnostic, "event=shot_end", "shot-end diagnostic");
+        checkContains(diagnostic, "lethalPromoted=false", "diagnostic lethal result");
+
+        resetRuntime();
+        SandboxOptions.instance.setOptionForTest(
+            "CJSFirearmAimingOverhaul.HeadshotDiagnosticLogging",
+            new SandboxOptions.BooleanSandboxOption(false)
+        );
+        player = createPlayer(0.0F, 0);
+        weapon = (HandWeapon)player.getPrimaryHandItem();
+        output.reset();
+        System.setOut(new PrintStream(output, true, StandardCharsets.UTF_8));
+        try {
+            FirearmAimRuntime.captureShotStabilization(player, weapon);
+            FirearmAimRuntime.endShot();
+        } finally {
+            System.setOut(originalOut);
+        }
+        check(output.size() == 0, "disabled headshot diagnostics must stay silent");
+    }
+
     private static void testAccuracyChangesAreScopedToValidTargets() {
         resetRuntime();
         IsoPlayer player = createPlayer(15.0F, 0);
@@ -837,6 +928,7 @@ public final class FirearmAimingPatchTest {
 
     private static HandWeapon createWeapon(boolean aimedFirearm) {
         HandWeapon weapon = new HandWeapon();
+        weapon.setFullType("Base.TestFirearm");
         weapon.setAimedFirearm(aimedFirearm);
         weapon.setAimingTime(15);
         weapon.setMaxSightRange(6.0F);
@@ -862,6 +954,10 @@ public final class FirearmAimingPatchTest {
 
     private static void resetRuntime() {
         SandboxOptions.instance.clearOptionsForTest();
+        SandboxOptions.instance.setOptionForTest(
+            "CJSFirearmAimingOverhaul.HeadshotDiagnosticLogging",
+            new SandboxOptions.BooleanSandboxOption(false)
+        );
         FirearmAimRuntime.resetForTest();
     }
 
@@ -903,6 +999,10 @@ public final class FirearmAimingPatchTest {
         if (Math.abs(expected - actual) > 0.001F) {
             throw new AssertionError(message + ": expected " + expected + ", got " + actual);
         }
+    }
+
+    private static void checkContains(String text, String expected, String message) {
+        check(text.contains(expected), message + ": missing \"" + expected + "\" in:\n" + text);
     }
 
     private static void check(boolean condition, String message) {

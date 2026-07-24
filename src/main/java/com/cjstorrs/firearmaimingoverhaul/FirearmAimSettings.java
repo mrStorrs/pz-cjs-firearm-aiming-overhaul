@@ -7,6 +7,7 @@ public final class FirearmAimSettings {
     public static final double DEFAULT_MAXIMUM_CONDITION_SECONDS = 4.0;
     public static final double DEFAULT_FAR_PROGRESS_EXPONENT = 1.25;
     public static final double DEFAULT_REFERENCE_GAP_TILES = 10.0;
+    public static final boolean DEFAULT_HEADSHOT_DIAGNOSTIC_LOGGING = true;
 
     private static final String MAXIMUM_CLEAN_AIM_SECONDS_OPTION =
         "CJSFirearmAimingOverhaul.MaximumCleanAimSeconds";
@@ -16,6 +17,8 @@ public final class FirearmAimSettings {
         "CJSFirearmAimingOverhaul.CurveExponent";
     private static final String REFERENCE_GAP_TILES_OPTION =
         "CJSFirearmAimingOverhaul.FullPenaltyDistanceTiles";
+    private static final String HEADSHOT_DIAGNOSTIC_LOGGING_OPTION =
+        "CJSFirearmAimingOverhaul.HeadshotDiagnosticLogging";
 
     private FirearmAimSettings() {
     }
@@ -54,6 +57,15 @@ public final class FirearmAimSettings {
             1.0,
             30.0
         );
+    }
+
+    public static boolean isHeadshotDiagnosticLoggingEnabled() {
+        SandboxOptions.SandboxOption option =
+            SandboxOptions.instance.getOptionByName(HEADSHOT_DIAGNOSTIC_LOGGING_OPTION);
+        if (option instanceof SandboxOptions.BooleanSandboxOption booleanOption) {
+            return booleanOption.getValue();
+        }
+        return DEFAULT_HEADSHOT_DIAGNOSTIC_LOGGING;
     }
 
     private static float readDoubleOption(String name, double fallback, double minimum, double maximum) {

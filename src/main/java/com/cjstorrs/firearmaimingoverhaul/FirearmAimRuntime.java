@@ -1,8 +1,10 @@
 package com.cjstorrs.firearmaimingoverhaul;
 
 import java.util.Collections;
+import java.util.Locale;
 import java.util.Map;
 import java.util.WeakHashMap;
+import java.util.concurrent.atomic.AtomicLong;
 import zombie.characters.IsoGameCharacter;
 import zombie.characters.IsoPlayer;
 import zombie.characters.skills.PerkFactory;
@@ -34,6 +36,9 @@ public final class FirearmAimRuntime {
     private static final long NO_TARGET_KEY = 0L;
     private static final long OBJECT_TARGET_NAMESPACE = 1L << 62;
     private static final long HIT_INFO_TARGET_NAMESPACE = 1L << 61;
+    private static final String HEADSHOT_DIAGNOSTIC_PREFIX =
+        "[cjsFirearmAimingOverhaul][headshot-debug] ";
+    private static final AtomicLong SHOT_IDS = new AtomicLong();
     private static final Map<IsoGameCharacter, AimState> AIM_STATES =
         Collections.synchronizedMap(new WeakHashMap<>());
     private static final ThreadLocal<AccuracyScope> ACCURACY_SCOPE =
@@ -91,12 +96,41 @@ public final class FirearmAimRuntime {
     public static void captureShotStabilization(IsoPlayer player, HandWeapon weapon) {
         ShotScope scope = SHOT_SCOPE.get();
         scope.reset();
+        scope.shotId = SHOT_IDS.incrementAndGet();
+        scope.diagnosticLogging = FirearmAimSettings.isHeadshotDiagnosticLoggingEnabled();
         scope.owner = player;
         scope.weapon = weapon;
+        scope.stabilizationProgress = getStabilizationProgress(player);
         scope.fullyStabilized = weapon != null
             && weapon.isAimedFirearm()
             && weapon == getAimedFirearm(player)
-            && getStabilizationProgress(player) >= 1.0F;
+            && scope.stabilizationProgress >= 1.0F;
+
+        AimState state = AIM_STATES.get(player);
+        scope.completedWork = state == null ? Float.NaN : state.completedWork;
+        scope.requiredWork = state == null ? Float.NaN : state.requiredWork;
+        TargetProfile primaryTarget = getPrimaryTarget(player);
+        scope.primaryTargetKey = primaryTarget.key;
+        scope.primaryTargetDistance = primaryTarget.distance;
+        scope.outcome = scope.fullyStabilized
+            ? "awaiting_targeted_body_part"
+            : "not_fully_stabilized";
+
+        if (scope.diagnosticLogging) {
+            logHeadshotDiagnostic(
+                "event=shot_capture"
+                    + " shot=" + scope.shotId
+                    + " ownerId=" + player.getID()
+                    + " weapon=" + getWeaponType(weapon)
+                    + " progress=" + formatDiagnosticFloat(scope.stabilizationProgress)
+                    + " fullyStabilized=" + scope.fullyStabilized
+                    + " aimingDelay=" + formatDiagnosticFloat(player.getAimingDelay())
+                    + " completedWork=" + formatDiagnosticFloat(scope.completedWork)
+                    + " requiredWork=" + formatDiagnosticFloat(scope.requiredWork)
+                    + " targetKey=" + scope.primaryTargetKey
+                    + " targetDistance=" + formatDiagnosticFloat(scope.primaryTargetDistance)
+            );
+        }
     }
 
     public static void recordTargetedBodyPart(
@@ -105,15 +139,37 @@ public final class FirearmAimRuntime {
             IsoGameCharacter target,
             int bodyPart) {
         ShotScope scope = SHOT_SCOPE.get();
-        if (!scope.fullyStabilized
-                || scope.owner != wielder
-                || scope.weapon != weapon
-                || target == null
-                || !RagdollBodyPart.isHead(bodyPart)) {
-            return;
-        }
+        scope.bodyPartReported = true;
+        scope.reportedBodyPart = bodyPart;
+        scope.reportedTarget = target;
 
-        scope.targetedHead = target;
+        String result;
+        if (!scope.fullyStabilized) {
+            result = "rejected_not_fully_stabilized";
+        } else if (scope.owner != wielder) {
+            result = "rejected_owner_mismatch";
+        } else if (scope.weapon != weapon) {
+            result = "rejected_weapon_mismatch";
+        } else if (target == null) {
+            result = "rejected_null_target";
+        } else if (!RagdollBodyPart.isHead(bodyPart)) {
+            result = "rejected_body_not_head";
+        } else {
+            scope.targetedHead = target;
+            result = "accepted_head_marker";
+        }
+        scope.outcome = result;
+
+        if (scope.diagnosticLogging) {
+            logHeadshotDiagnostic(
+                "event=targeted_body_part"
+                    + " shot=" + scope.shotId
+                    + " targetId=" + getTargetId(target)
+                    + " targetType=" + getTargetType(target)
+                    + " bodyPart=" + getBodyPartName(bodyPart)
+                    + " result=" + result
+            );
+        }
     }
 
     public static float guaranteeLethalHeadshotDamage(
@@ -123,24 +179,70 @@ public final class FirearmAimRuntime {
             boolean ignoreDamage,
             float damage) {
         ShotScope scope = SHOT_SCOPE.get();
-        boolean matchingTargetedHead = scope.fullyStabilized
-            && scope.owner == wielder
-            && scope.weapon == weapon
-            && scope.targetedHead == target
-            && target != null;
-        if (!matchingTargetedHead) {
-            return damage;
+        scope.damageChecks++;
+        float targetHealth = target == null ? Float.NaN : target.getHealth();
+        float resultDamage = damage;
+        boolean promoted = false;
+        String result;
+
+        if (!scope.fullyStabilized) {
+            result = "rejected_not_fully_stabilized";
+        } else if (scope.owner != wielder) {
+            result = "rejected_owner_mismatch";
+        } else if (scope.weapon != weapon) {
+            result = "rejected_weapon_mismatch";
+        } else if (target == null) {
+            result = "rejected_null_target";
+        } else if (scope.targetedHead == null) {
+            result = "rejected_no_accepted_head_marker";
+        } else if (scope.targetedHead != target) {
+            result = "rejected_head_marker_target_mismatch";
+        } else {
+            scope.targetedHead = null;
+            if (ignoreDamage) {
+                result = "rejected_ignore_damage";
+            } else if (!target.isZombie() && !target.isAnimal()) {
+                result = "rejected_ineligible_target_type";
+            } else {
+                resultDamage = Math.max(damage, targetHealth);
+                promoted = true;
+                result = "promoted_lethal_headshot";
+            }
         }
 
-        scope.targetedHead = null;
-        if (ignoreDamage || (!target.isZombie() && !target.isAnimal())) {
-            return damage;
+        scope.lethalPromoted |= promoted;
+        scope.outcome = result;
+        if (scope.diagnosticLogging) {
+            logHeadshotDiagnostic(
+                "event=damage_decision"
+                    + " shot=" + scope.shotId
+                    + " targetId=" + getTargetId(target)
+                    + " targetType=" + getTargetType(target)
+                    + " ignoreDamage=" + ignoreDamage
+                    + " incomingDamage=" + formatDiagnosticFloat(damage)
+                    + " targetHealth=" + formatDiagnosticFloat(targetHealth)
+                    + " outgoingDamage=" + formatDiagnosticFloat(resultDamage)
+                    + " result=" + result
+            );
         }
 
-        return Math.max(damage, target.getHealth());
+        return resultDamage;
     }
 
     public static void endShot() {
+        ShotScope scope = SHOT_SCOPE.get();
+        if (scope.diagnosticLogging) {
+            logHeadshotDiagnostic(
+                "event=shot_end"
+                    + " shot=" + scope.shotId
+                    + " bodyPartReported=" + scope.bodyPartReported
+                    + " bodyPart=" + getBodyPartName(scope.reportedBodyPart)
+                    + " bodyTargetId=" + getTargetId(scope.reportedTarget)
+                    + " damageChecks=" + scope.damageChecks
+                    + " lethalPromoted=" + scope.lethalPromoted
+                    + " outcome=" + scope.outcome
+            );
+        }
         SHOT_SCOPE.remove();
     }
 
@@ -359,6 +461,53 @@ public final class FirearmAimRuntime {
         AIM_STATES.clear();
         ACCURACY_SCOPE.remove();
         SHOT_SCOPE.remove();
+        SHOT_IDS.set(0L);
+    }
+
+    private static void logHeadshotDiagnostic(String message) {
+        System.out.println(HEADSHOT_DIAGNOSTIC_PREFIX + message);
+    }
+
+    private static String formatDiagnosticFloat(float value) {
+        return Float.isFinite(value)
+            ? String.format(Locale.ROOT, "%.3f", value)
+            : "n/a";
+    }
+
+    private static String getWeaponType(HandWeapon weapon) {
+        if (weapon == null) {
+            return "none";
+        }
+        String fullType = weapon.getFullType();
+        return fullType == null || fullType.isEmpty() ? "unknown" : fullType;
+    }
+
+    private static int getTargetId(IsoGameCharacter target) {
+        return target == null ? -1 : target.getID();
+    }
+
+    private static String getTargetType(IsoGameCharacter target) {
+        if (target == null) {
+            return "none";
+        }
+        if (target.isZombie()) {
+            return "zombie";
+        }
+        if (target.isAnimal()) {
+            return "animal";
+        }
+        if (target instanceof IsoPlayer) {
+            return "player";
+        }
+        return "character";
+    }
+
+    private static String getBodyPartName(int bodyPart) {
+        RagdollBodyPart[] bodyParts = RagdollBodyPart.values();
+        if (bodyPart < 0 || bodyPart >= bodyParts.length) {
+            return "NONE";
+        }
+        return bodyParts[bodyPart].name();
     }
 
     private static AimState getOrCreateState(IsoGameCharacter character, HandWeapon weapon) {
@@ -603,16 +752,42 @@ public final class FirearmAimRuntime {
     }
 
     private static final class ShotScope {
+        private long shotId;
         private IsoGameCharacter owner;
         private HandWeapon weapon;
         private IsoGameCharacter targetedHead;
+        private IsoGameCharacter reportedTarget;
+        private long primaryTargetKey;
+        private float primaryTargetDistance;
+        private float stabilizationProgress;
+        private float completedWork;
+        private float requiredWork;
+        private int reportedBodyPart = -1;
+        private int damageChecks;
+        private String outcome = "not_captured";
+        private boolean diagnosticLogging;
         private boolean fullyStabilized;
+        private boolean bodyPartReported;
+        private boolean lethalPromoted;
 
         private void reset() {
+            this.shotId = 0L;
             this.owner = null;
             this.weapon = null;
             this.targetedHead = null;
+            this.reportedTarget = null;
+            this.primaryTargetKey = NO_TARGET_KEY;
+            this.primaryTargetDistance = Float.NaN;
+            this.stabilizationProgress = 0.0F;
+            this.completedWork = Float.NaN;
+            this.requiredWork = Float.NaN;
+            this.reportedBodyPart = -1;
+            this.damageChecks = 0;
+            this.outcome = "not_captured";
+            this.diagnosticLogging = false;
             this.fullyStabilized = false;
+            this.bodyPartReported = false;
+            this.lethalPromoted = false;
         }
     }
 

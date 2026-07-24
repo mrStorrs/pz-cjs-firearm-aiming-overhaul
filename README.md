@@ -167,17 +167,25 @@ minimum reopening. The larger reopening wins.
 
 ## Sandbox Settings
 
-The four balance controls are under
+Four balance controls and one diagnostic toggle are under
 **Sandbox > CJS Firearm Aiming Overhaul**:
 
 - **Maximum Clean Aim Seconds** defaults to 4.
 - **Maximum Condition Seconds** defaults to 4.
 - **Far-Range Progress Curve** defaults to 1.25.
 - **Reference Range Gap** defaults to 10 tiles.
+- **Headshot Diagnostic Logging** defaults to enabled.
 
 Version 1.6 replaces the old maximum-extra-seconds option with the explicit
 clean and condition maximums. If a save has not stored the new options yet,
 the runtime uses the new four-second defaults.
+
+Headshot diagnostics write a compact sequence for each shot to
+`~/Zomboid/console.txt` with the prefix
+`[cjsFirearmAimingOverhaul][headshot-debug]`. The sequence reports captured
+stabilization, Project Zomboid's targeted body part, the final damage decision,
+and a shot summary. Disable the sandbox toggle after collecting the needed
+shots.
 
 ## Build
 

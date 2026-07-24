@@ -7,5 +7,7 @@
   "Sandbox_CJSFirearmAimingOverhaul_CurveExponent": "Far-Range Progress Curve",
   "Sandbox_CJSFirearmAimingOverhaul_CurveExponent_tooltip": "Controls how quickly extra time grows as the target moves from effective sight to physical maximum range. Higher values are gentler near sight range and steeper near maximum range. Default: 1.25.",
   "Sandbox_CJSFirearmAimingOverhaul_FullPenaltyDistanceTiles": "Reference Range Gap",
-  "Sandbox_CJSFirearmAimingOverhaul_FullPenaltyDistanceTiles_tooltip": "Sight-to-maximum gap that receives the full far-range penalty. Smaller gaps are softened by the square root of their relative size; larger gaps use normalized progress and are not penalized again just for being longer. Default: 10 tiles."
+  "Sandbox_CJSFirearmAimingOverhaul_FullPenaltyDistanceTiles_tooltip": "Sight-to-maximum gap that receives the full far-range penalty. Smaller gaps are softened by the square root of their relative size; larger gaps use normalized progress and are not penalized again just for being longer. Default: 10 tiles.",
+  "Sandbox_CJSFirearmAimingOverhaul_HeadshotDiagnosticLogging": "Headshot Diagnostic Logging",
+  "Sandbox_CJSFirearmAimingOverhaul_HeadshotDiagnosticLogging_tooltip": "Writes one compact diagnostic sequence per shot to console.txt, including stabilization, the body part reported by Project Zomboid, and the lethal-promotion decision. Enabled by default while headshot targeting is being tuned."
 }

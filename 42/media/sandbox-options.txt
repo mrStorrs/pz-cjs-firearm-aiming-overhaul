@@ -39,3 +39,11 @@ option CJSFirearmAimingOverhaul.FullPenaltyDistanceTiles
     page = CJSFirearmAimingOverhaul,
     translation = CJSFirearmAimingOverhaul_FullPenaltyDistanceTiles,
 }
+
+option CJSFirearmAimingOverhaul.HeadshotDiagnosticLogging
+{
+    type = boolean,
+    default = true,
+    page = CJSFirearmAimingOverhaul,
+    translation = CJSFirearmAimingOverhaul_HeadshotDiagnosticLogging,
+}

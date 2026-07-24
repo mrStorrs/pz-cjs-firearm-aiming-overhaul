@@ -5,6 +5,8 @@ public final class Main {
     }
 
     public static void main(String[] args) {
-        System.out.println("[cjsFirearmAimingOverhaul] Loading distance-aware firearm stabilization patches.");
+        System.out.println(
+            "[cjsFirearmAimingOverhaul] Loading v1.3.0 distance and penalty-to-time stabilization patches."
+        );
     }
 }

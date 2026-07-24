@@ -28,14 +28,14 @@ public final class FirearmAimRuntime {
             return;
         }
 
-        float multiplier = calculateAimTimeMultiplier(character, weapon);
         AimState state = AIM_STATES.get(character);
         if (state == null || state.weapon != weapon) {
             state = createState(character, weapon);
             AIM_STATES.put(character, state);
         }
 
-        state.multiplier = multiplier;
+        state.consumePendingPenalty();
+        state.multiplier = calculateAimTimeMultiplier(character, weapon);
         float remainingWork = state.getRemainingWork();
         character.setAimingDelay(remainingWork);
         state.workBeforeVanillaUpdate = remainingWork;
@@ -76,7 +76,12 @@ public final class FirearmAimRuntime {
             return 1.0F;
         }
 
-        float distance = (float)Math.sqrt(Math.max(0.0F, hitInfoList.get(0).distSq));
+        float minimumDistanceSquared = Float.MAX_VALUE;
+        for (int index = 0; index < hitInfoList.size(); index++) {
+            minimumDistanceSquared = Math.min(minimumDistanceSquared, hitInfoList.get(index).distSq);
+        }
+
+        float distance = (float)Math.sqrt(Math.max(0.0F, minimumDistanceSquared));
         float sightRange = weapon.getMaxSightRange(character);
         float physicalRange = getPhysicalRange(character, weapon);
         if (distance <= sightRange || physicalRange <= sightRange + RANGE_EPSILON) {
@@ -89,14 +94,26 @@ public final class FirearmAimRuntime {
         );
         float maximumMultiplier = FirearmAimSettings.getMaximumMultiplier();
         float curveExponent = FirearmAimSettings.getCurveExponent();
-        return 1.0F + (maximumMultiplier - 1.0F) * (float)Math.pow(overRange, curveExponent);
+        float distanceMultiplier =
+            1.0F + (maximumMultiplier - 1.0F) * (float)Math.pow(overRange, curveExponent);
+        AimState state = AIM_STATES.get(character);
+        if (state == null || state.weapon != weapon) {
+            return distanceMultiplier;
+        }
+
+        return distanceMultiplier + state.recoverablePenalty / state.baseDelay;
     }
 
     public static void beginAccuracyCalculation(IsoGameCharacter owner, HandWeapon weapon) {
         AccuracyScope scope = ACCURACY_SCOPE.get();
         if (scope.depth++ == 0) {
             scope.active = weapon != null && weapon.isAimedFirearm();
+            scope.owner = owner;
+            scope.weapon = weapon;
             scope.physicalRange = scope.active ? getPhysicalRange(owner, weapon) : 0.0F;
+            scope.beyondSight = false;
+            scope.targetDistance = Float.MAX_VALUE;
+            scope.recoverablePenalty = 0.0F;
         }
     }
 
@@ -107,9 +124,15 @@ public final class FirearmAimRuntime {
     public static void endAccuracyCalculation() {
         AccuracyScope scope = ACCURACY_SCOPE.get();
         if (scope.depth <= 1) {
+            captureRecoverablePenalty(scope);
             scope.depth = 0;
             scope.active = false;
+            scope.owner = null;
+            scope.weapon = null;
             scope.physicalRange = 0.0F;
+            scope.beyondSight = false;
+            scope.targetDistance = Float.MAX_VALUE;
+            scope.recoverablePenalty = 0.0F;
         } else {
             scope.depth--;
         }
@@ -123,11 +146,34 @@ public final class FirearmAimRuntime {
             return distance;
         }
 
+        AccuracyScope scope = ACCURACY_SCOPE.get();
+        scope.beyondSight = true;
+        scope.targetDistance = distance;
         if (minimumSightRange < 0.0F || minimumSightRange >= maximumSightRange) {
             return maximumSightRange;
         }
 
         return minimumSightRange + (maximumSightRange - minimumSightRange) * 0.5F;
+    }
+
+    public static float convertBeyondSightPermanentPenalty(float penalty) {
+        AccuracyScope scope = ACCURACY_SCOPE.get();
+        if (!scope.beyondSight || !Float.isFinite(penalty) || penalty <= 0.0F) {
+            return penalty;
+        }
+
+        scope.recoverablePenalty += penalty;
+        return 0.0F;
+    }
+
+    public static float convertBeyondSightVisionModifier(float modifier) {
+        AccuracyScope scope = ACCURACY_SCOPE.get();
+        if (!scope.beyondSight || !Float.isFinite(modifier) || modifier <= 1.0F) {
+            return modifier;
+        }
+
+        scope.recoverablePenalty += 100.0F - 100.0F / modifier;
+        return 1.0F;
     }
 
     public static float removeBeyondSightDelayScaling(
@@ -157,6 +203,20 @@ public final class FirearmAimRuntime {
         return state;
     }
 
+    private static void captureRecoverablePenalty(AccuracyScope scope) {
+        if (!scope.active || !scope.beyondSight || scope.owner == null || scope.weapon == null) {
+            return;
+        }
+
+        AimState state = AIM_STATES.get(scope.owner);
+        if (state == null || state.weapon != scope.weapon) {
+            state = createState(scope.owner, scope.weapon);
+            AIM_STATES.put(scope.owner, state);
+        }
+
+        state.capturePendingPenalty(scope.targetDistance, scope.recoverablePenalty);
+    }
+
     private static HandWeapon getAimedFirearm(IsoGameCharacter character) {
         InventoryItem item = character.getPrimaryHandItem();
         return item instanceof HandWeapon weapon && weapon.isAimedFirearm() ? weapon : null;
@@ -180,6 +240,10 @@ public final class FirearmAimRuntime {
         private float multiplier = 1.0F;
         private float workBeforeVanillaUpdate;
         private boolean updatePending;
+        private float recoverablePenalty;
+        private float pendingPenalty;
+        private float pendingPenaltyDistance = Float.MAX_VALUE;
+        private boolean hasPendingPenalty;
 
         private AimState(HandWeapon weapon, float baseDelay) {
             this.weapon = weapon;
@@ -193,11 +257,37 @@ public final class FirearmAimRuntime {
         private float getRemainingWork() {
             return Math.max(0.0F, this.baseDelay * this.multiplier - this.completedWork);
         }
+
+        private void capturePendingPenalty(float distance, float penalty) {
+            if (!this.hasPendingPenalty || distance < this.pendingPenaltyDistance - RANGE_EPSILON) {
+                this.pendingPenaltyDistance = distance;
+                this.pendingPenalty = penalty;
+                this.hasPendingPenalty = true;
+            } else if (Math.abs(distance - this.pendingPenaltyDistance) <= RANGE_EPSILON) {
+                this.pendingPenalty = Math.max(this.pendingPenalty, penalty);
+            }
+        }
+
+        private void consumePendingPenalty() {
+            if (!this.hasPendingPenalty) {
+                return;
+            }
+
+            this.recoverablePenalty = this.pendingPenalty;
+            this.pendingPenalty = 0.0F;
+            this.pendingPenaltyDistance = Float.MAX_VALUE;
+            this.hasPendingPenalty = false;
+        }
     }
 
     private static final class AccuracyScope {
         private int depth;
         private boolean active;
+        private IsoGameCharacter owner;
+        private HandWeapon weapon;
         private float physicalRange;
+        private boolean beyondSight;
+        private float targetDistance = Float.MAX_VALUE;
+        private float recoverablePenalty;
     }
 }

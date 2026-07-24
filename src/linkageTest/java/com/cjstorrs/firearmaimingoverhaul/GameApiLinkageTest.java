@@ -13,6 +13,7 @@ public final class GameApiLinkageTest {
         Class<?> isoPlayer = load(loader, "zombie.characters.IsoPlayer");
         Class<?> handWeapon = load(loader, "zombie.inventory.types.HandWeapon");
         Class<?> hitInfo = load(loader, "zombie.network.fields.hit.HitInfo");
+        Class<?> isoGridSquare = load(loader, "zombie.iso.IsoGridSquare");
         Class<?> pzArrayList = load(loader, "zombie.util.list.PZArrayList");
 
         requireMethod(isoGameCharacter, "updateAimingDelay");
@@ -21,6 +22,10 @@ public final class GameApiLinkageTest {
         check(requireMethod(isoGameCharacter, "getHitInfoList").getReturnType() == pzArrayList, "hit-info list return type");
         requireMethod(isoGameCharacter, "isAiming");
         requireMethod(isoGameCharacter, "getPrimaryHandItem");
+        check(
+            requireMethod(isoGameCharacter, "getWornItemsVisionModifier").getReturnType() == float.class,
+            "vision modifier return type"
+        );
         check(
             requireMethod(isoPlayer, "calculateCritChance", isoGameCharacter).getReturnType() == int.class,
             "critical-chance return type"
@@ -37,6 +42,23 @@ public final class GameApiLinkageTest {
             requireMethod(combatManager, "getAimDelayPenalty", float.class, float.class, float.class, float.class)
                 .getReturnType() == float.class,
             "aim-delay penalty return type"
+        );
+        check(
+            requireMethod(combatManager, "getMovePenalty", isoGameCharacter, float.class).getReturnType() == float.class,
+            "movement penalty return type"
+        );
+        check(
+            requireMethod(combatManager, "getPainPenalty", isoGameCharacter).getReturnType() == float.class,
+            "pain penalty return type"
+        );
+        check(
+            requireMethod(combatManager, "getWeatherPenalty", isoGameCharacter, handWeapon, isoGridSquare, float.class)
+                .getReturnType() == float.class,
+            "weather penalty return type"
+        );
+        check(
+            requireMethod(combatManager, "getMoodlesPenalty", isoGameCharacter, float.class).getReturnType() == float.class,
+            "moodles penalty return type"
         );
 
         check(requireMethod(handWeapon, "isAimedFirearm").getReturnType() == boolean.class, "aimed-firearm return type");
@@ -72,6 +94,8 @@ public final class GameApiLinkageTest {
         requireMethod(runtime, "beginCriticalChanceCalculation", isoPlayer);
         requireMethod(runtime, "endAccuracyCalculation");
         requireMethod(runtime, "normalizeBeyondSightAccuracyDistance", float.class, float.class, float.class);
+        requireMethod(runtime, "convertBeyondSightPermanentPenalty", float.class);
+        requireMethod(runtime, "convertBeyondSightVisionModifier", float.class);
         requireMethod(runtime, "removeBeyondSightDelayScaling", float.class, float.class, float.class);
 
         System.out.println("GameApiLinkageTest: PASS");

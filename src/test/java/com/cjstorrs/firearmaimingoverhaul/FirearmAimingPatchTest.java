@@ -19,12 +19,14 @@ public final class FirearmAimingPatchTest {
         testCurveDefaultsAndConfiguration();
         testAbsoluteDistanceIgnoresSightToMaximumGap();
         testTinySightToMaximumGapGetsSmallPenalty();
+        testClosestTargetControlsAimTime();
         testInsideSightRangeMatchesVanilla();
         testMaximumRangeTakesFourTimesAsLong();
         testMovingFartherReopensStabilization();
         testMovingCloserRetainsAccumulatedWork();
         testPostShotRecoveryUsesDistanceScaling();
         testAccuracyChangesAreScopedToFirearms();
+        testBeyondSightPenaltiesBecomeAdditionalAimTime();
         testPatchMetadata();
         testZombieBuddyDiscovery();
         System.out.println("FirearmAimingPatchTest: PASS");
@@ -102,6 +104,36 @@ public final class FirearmAimingPatchTest {
             1.0949F,
             FirearmAimRuntime.calculateAimTimeMultiplier(player, weapon),
             "one-tile sight-to-maximum gap"
+        );
+    }
+
+    private static void testClosestTargetControlsAimTime() {
+        resetRuntime();
+        IsoPlayer player = createPlayer(10.0F);
+        HandWeapon weapon = (HandWeapon)player.getPrimaryHandItem();
+        setTargetDistance(player, 20.0F);
+        player.getHitInfoList().add(new HitInfo(100.0F));
+
+        checkClose(
+            1.7589F,
+            FirearmAimRuntime.calculateAimTimeMultiplier(player, weapon),
+            "the closest target shown by the reticle must control aim time"
+        );
+
+        FirearmAimRuntime.beginAccuracyCalculation(player, weapon);
+        FirearmAimRuntime.normalizeBeyondSightAccuracyDistance(20.0F, 2.0F, 6.0F);
+        FirearmAimRuntime.convertBeyondSightPermanentPenalty(50.0F);
+        FirearmAimRuntime.endAccuracyCalculation();
+        FirearmAimRuntime.beginAccuracyCalculation(player, weapon);
+        FirearmAimRuntime.normalizeBeyondSightAccuracyDistance(10.0F, 2.0F, 6.0F);
+        FirearmAimRuntime.convertBeyondSightPermanentPenalty(10.0F);
+        FirearmAimRuntime.endAccuracyCalculation();
+        runAimingUpdate(player, 0.0F);
+
+        checkClose(
+            2.7589F,
+            FirearmAimRuntime.calculateAimTimeMultiplier(player, weapon),
+            "the closest target's recoverable penalties must control aim time"
         );
     }
 
@@ -237,6 +269,90 @@ public final class FirearmAimingPatchTest {
         FirearmAimRuntime.endAccuracyCalculation();
     }
 
+    private static void testBeyondSightPenaltiesBecomeAdditionalAimTime() {
+        resetRuntime();
+        IsoPlayer player = createPlayer(10.0F);
+        HandWeapon firearm = (HandWeapon)player.getPrimaryHandItem();
+        setTargetDistance(player, 20.0F);
+
+        FirearmAimRuntime.beginAccuracyCalculation(player, firearm);
+        checkClose(
+            4.0F,
+            FirearmAimRuntime.normalizeBeyondSightAccuracyDistance(20.0F, 2.0F, 6.0F),
+            "far accuracy distance"
+        );
+        checkClose(
+            0.0F,
+            FirearmAimRuntime.convertBeyondSightPermanentPenalty(12.0F),
+            "movement penalty must become aim time"
+        );
+        checkClose(
+            0.0F,
+            FirearmAimRuntime.convertBeyondSightPermanentPenalty(8.0F),
+            "moodle penalty must become aim time"
+        );
+        checkClose(
+            1.0F,
+            FirearmAimRuntime.convertBeyondSightVisionModifier(20.0F / 19.0F),
+            "vision penalty must become aim time"
+        );
+        FirearmAimRuntime.endAccuracyCalculation();
+        runAimingUpdate(player, 0.0F);
+
+        checkClose(
+            6.5F,
+            FirearmAimRuntime.calculateAimTimeMultiplier(player, firearm),
+            "twenty-five recovered accuracy points must add 2.5x aim time"
+        );
+
+        for (int i = 0; i < 40; i++) {
+            runAimingUpdate(player, 1.0F);
+        }
+        check(player.getAimingDelay() > 0.0F, "condition penalties must keep far stabilization in progress");
+
+        for (int i = 0; i < 25; i++) {
+            runAimingUpdate(player, 1.0F);
+        }
+        checkClose(0.0F, player.getAimingDelay(), "condition penalties must remain fully recoverable");
+
+        FirearmAimRuntime.beginAccuracyCalculation(player, firearm);
+        FirearmAimRuntime.normalizeBeyondSightAccuracyDistance(20.0F, 2.0F, 6.0F);
+        checkClose(
+            -3.0F,
+            FirearmAimRuntime.convertBeyondSightPermanentPenalty(-3.0F),
+            "accuracy bonuses must not be converted into penalties"
+        );
+        checkClose(
+            0.8F,
+            FirearmAimRuntime.convertBeyondSightVisionModifier(0.8F),
+            "beneficial vision modifiers must remain active"
+        );
+        FirearmAimRuntime.endAccuracyCalculation();
+
+        resetRuntime();
+        player = createPlayer(10.0F);
+        firearm = (HandWeapon)player.getPrimaryHandItem();
+        setTargetDistance(player, 5.0F);
+        FirearmAimRuntime.beginAccuracyCalculation(player, firearm);
+        FirearmAimRuntime.normalizeBeyondSightAccuracyDistance(5.0F, 2.0F, 6.0F);
+        checkClose(
+            12.0F,
+            FirearmAimRuntime.convertBeyondSightPermanentPenalty(12.0F),
+            "inside-sight penalties must remain vanilla"
+        );
+        checkClose(
+            1.25F,
+            FirearmAimRuntime.convertBeyondSightVisionModifier(1.25F),
+            "inside-sight vision must remain vanilla"
+        );
+        FirearmAimRuntime.endAccuracyCalculation();
+        checkClose(
+            1.0F,
+            FirearmAimRuntime.calculateAimTimeMultiplier(player, firearm),
+            "inside-sight penalties must not extend aim time"
+        );
+    }
+
     private static void testPatchMetadata() throws ReflectiveOperationException {
         assertPatchTarget(
             FirearmAimingPatches.AimingDelayUpdate.class,
@@ -267,6 +383,31 @@ public final class FirearmAimingPatchTest {
             FirearmAimingPatches.AimDelayPenalty.class,
             "zombie.CombatManager",
             "getAimDelayPenalty"
+        );
+        assertPatchTarget(
+            FirearmAimingPatches.MovementPenalty.class,
+            "zombie.CombatManager",
+            "getMovePenalty"
+        );
+        assertPatchTarget(
+            FirearmAimingPatches.PainPenalty.class,
+            "zombie.CombatManager",
+            "getPainPenalty"
+        );
+        assertPatchTarget(
+            FirearmAimingPatches.WeatherPenalty.class,
+            "zombie.CombatManager",
+            "getWeatherPenalty"
+        );
+        assertPatchTarget(
+            FirearmAimingPatches.MoodlesPenalty.class,
+            "zombie.CombatManager",
+            "getMoodlesPenalty"
+        );
+        assertPatchTarget(
+            FirearmAimingPatches.VisionPenalty.class,
+            "zombie.characters.IsoGameCharacter",
+            "getWornItemsVisionModifier"
         );
 
         Method updateEnter = FirearmAimingPatches.AimingDelayUpdate.class.getDeclaredMethod(
@@ -316,6 +457,16 @@ public final class FirearmAimingPatchTest {
             float.class
         );
         assertMutableReturn(delayExit.getParameters()[2], "aim-delay penalty");
+
+        for (Class<?> penaltyPatch : List.of(
+                FirearmAimingPatches.MovementPenalty.class,
+                FirearmAimingPatches.PainPenalty.class,
+                FirearmAimingPatches.WeatherPenalty.class,
+                FirearmAimingPatches.MoodlesPenalty.class,
+                FirearmAimingPatches.VisionPenalty.class)) {
+            Method penaltyExit = penaltyPatch.getDeclaredMethod("exit", float.class);
+            assertMutableReturn(penaltyExit.getParameters()[0], penaltyPatch.getSimpleName());
+        }
     }
 
     private static void testZombieBuddyDiscovery() {
@@ -329,9 +480,14 @@ public final class FirearmAimingPatchTest {
             FirearmAimingPatches.HitChanceCalculationScope.class,
             FirearmAimingPatches.CriticalChanceCalculationScope.class,
             FirearmAimingPatches.DistanceModifier.class,
-            FirearmAimingPatches.AimDelayPenalty.class
+            FirearmAimingPatches.AimDelayPenalty.class,
+            FirearmAimingPatches.MovementPenalty.class,
+            FirearmAimingPatches.PainPenalty.class,
+            FirearmAimingPatches.WeatherPenalty.class,
+            FirearmAimingPatches.MoodlesPenalty.class,
+            FirearmAimingPatches.VisionPenalty.class
         );
-        check(discovered.size() == expected.size(), "ZombieBuddy must discover exactly six patch classes");
+        check(discovered.size() == expected.size(), "ZombieBuddy must discover exactly eleven patch classes");
         for (Class<?> patchClass : expected) {
             check(discovered.contains(patchClass), "ZombieBuddy missed " + patchClass.getName());
         }

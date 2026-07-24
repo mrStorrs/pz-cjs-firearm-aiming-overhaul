@@ -87,4 +87,44 @@ public final class FirearmAimingPatches {
             );
         }
     }
+
+    @Patch(className = "zombie.CombatManager", methodName = "getMovePenalty")
+    public static final class MovementPenalty {
+        @Patch.OnExit
+        public static void exit(@Patch.Return(readOnly = false) float penalty) {
+            penalty = FirearmAimRuntime.convertBeyondSightPermanentPenalty(penalty);
+        }
+    }
+
+    @Patch(className = "zombie.CombatManager", methodName = "getPainPenalty")
+    public static final class PainPenalty {
+        @Patch.OnExit
+        public static void exit(@Patch.Return(readOnly = false) float penalty) {
+            penalty = FirearmAimRuntime.convertBeyondSightPermanentPenalty(penalty);
+        }
+    }
+
+    @Patch(className = "zombie.CombatManager", methodName = "getWeatherPenalty")
+    public static final class WeatherPenalty {
+        @Patch.OnExit
+        public static void exit(@Patch.Return(readOnly = false) float penalty) {
+            penalty = FirearmAimRuntime.convertBeyondSightPermanentPenalty(penalty);
+        }
+    }
+
+    @Patch(className = "zombie.CombatManager", methodName = "getMoodlesPenalty")
+    public static final class MoodlesPenalty {
+        @Patch.OnExit
+        public static void exit(@Patch.Return(readOnly = false) float penalty) {
+            penalty = FirearmAimRuntime.convertBeyondSightPermanentPenalty(penalty);
+        }
+    }
+
+    @Patch(className = "zombie.characters.IsoGameCharacter", methodName = "getWornItemsVisionModifier")
+    public static final class VisionPenalty {
+        @Patch.OnExit
+        public static void exit(@Patch.Return(readOnly = false) float modifier) {
+            modifier = FirearmAimRuntime.convertBeyondSightVisionModifier(modifier);
+        }
+    }
 }

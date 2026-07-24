@@ -21,6 +21,10 @@ public final class GameApiLinkageTest {
         check(requireMethod(isoGameCharacter, "getHitInfoList").getReturnType() == pzArrayList, "hit-info list return type");
         requireMethod(isoGameCharacter, "isAiming");
         requireMethod(isoGameCharacter, "getPrimaryHandItem");
+        check(
+            requireMethod(isoPlayer, "calculateCritChance", isoGameCharacter).getReturnType() == int.class,
+            "critical-chance return type"
+        );
 
         requireMethod(combatManager, "setAimingDelay", isoPlayer, handWeapon);
         requireMethod(combatManager, "calculateHitChanceData", isoGameCharacter, handWeapon, hitInfo);
@@ -65,8 +69,9 @@ public final class GameApiLinkageTest {
         requireMethod(runtime, "afterAimingDelayUpdate", isoGameCharacter);
         requireMethod(runtime, "synchronizePostShotDelay", isoPlayer);
         requireMethod(runtime, "beginAccuracyCalculation", isoGameCharacter, handWeapon);
+        requireMethod(runtime, "beginCriticalChanceCalculation", isoPlayer);
         requireMethod(runtime, "endAccuracyCalculation");
-        requireMethod(runtime, "removeBeyondSightDistancePenalty", float.class, float.class, float.class);
+        requireMethod(runtime, "normalizeBeyondSightAccuracyDistance", float.class, float.class, float.class);
         requireMethod(runtime, "removeBeyondSightDelayScaling", float.class, float.class, float.class);
 
         System.out.println("GameApiLinkageTest: PASS");

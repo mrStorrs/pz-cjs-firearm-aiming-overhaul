@@ -199,22 +199,30 @@ public final class FirearmAimingPatchTest {
 
         FirearmAimRuntime.beginAccuracyCalculation(player, nonFirearm);
         checkClose(
-            -20.0F,
-            FirearmAimRuntime.removeBeyondSightDistancePenalty(10.0F, 6.0F, -20.0F),
-            "non-firearm distance modifier"
+            10.0F,
+            FirearmAimRuntime.normalizeBeyondSightAccuracyDistance(10.0F, 2.0F, 6.0F),
+            "non-firearm accuracy distance"
+        );
+        FirearmAimRuntime.endAccuracyCalculation();
+
+        FirearmAimRuntime.beginCriticalChanceCalculation(player);
+        checkClose(
+            4.0F,
+            FirearmAimRuntime.normalizeBeyondSightAccuracyDistance(10.0F, 2.0F, 6.0F),
+            "critical-chance accuracy must share firearm normalization"
         );
         FirearmAimRuntime.endAccuracyCalculation();
 
         FirearmAimRuntime.beginAccuracyCalculation(player, firearm);
         checkClose(
-            -20.0F,
-            FirearmAimRuntime.removeBeyondSightDistancePenalty(5.0F, 6.0F, -20.0F),
-            "inside-sight modifier"
+            5.0F,
+            FirearmAimRuntime.normalizeBeyondSightAccuracyDistance(5.0F, 2.0F, 6.0F),
+            "inside-sight accuracy distance"
         );
         checkClose(
-            0.0F,
-            FirearmAimRuntime.removeBeyondSightDistancePenalty(10.0F, 6.0F, -20.0F),
-            "beyond-sight modifier"
+            4.0F,
+            FirearmAimRuntime.normalizeBeyondSightAccuracyDistance(10.0F, 2.0F, 6.0F),
+            "beyond-sight accuracy must use the optimal sight-band midpoint"
         );
         checkClose(
             8.0F,
@@ -222,9 +230,9 @@ public final class FirearmAimingPatchTest {
             "beyond-sight delay scaling"
         );
         checkClose(
-            -20.0F,
-            FirearmAimRuntime.removeBeyondSightDistancePenalty(21.0F, 6.0F, -20.0F),
-            "beyond-physical-range modifier"
+            21.0F,
+            FirearmAimRuntime.normalizeBeyondSightAccuracyDistance(21.0F, 2.0F, 6.0F),
+            "beyond-physical-range accuracy distance"
         );
         FirearmAimRuntime.endAccuracyCalculation();
     }
@@ -244,6 +252,11 @@ public final class FirearmAimingPatchTest {
             FirearmAimingPatches.HitChanceCalculationScope.class,
             "zombie.CombatManager",
             "calculateHitChanceData"
+        );
+        assertPatchTarget(
+            FirearmAimingPatches.CriticalChanceCalculationScope.class,
+            "zombie.characters.IsoPlayer",
+            "calculateCritChance"
         );
         assertPatchTarget(
             FirearmAimingPatches.DistanceModifier.class,
@@ -273,13 +286,28 @@ public final class FirearmAimingPatchTest {
         check(scopeExitAdvice != null, "accuracy scope exit must carry @Patch.OnExit");
         check(Throwable.class.equals(scopeExitAdvice.onThrowable()), "accuracy scope must close after exceptions");
 
-        Method distanceExit = FirearmAimingPatches.DistanceModifier.class.getDeclaredMethod(
-            "exit",
+        Method criticalScopeEnter = FirearmAimingPatches.CriticalChanceCalculationScope.class.getDeclaredMethod(
+            "enter",
+            IsoPlayer.class
+        );
+        assertThis(criticalScopeEnter.getParameters()[0], "critical-chance receiver");
+        Method criticalScopeExit = FirearmAimingPatches.CriticalChanceCalculationScope.class.getDeclaredMethod("exit");
+        Patch.OnExit criticalScopeExitAdvice = criticalScopeExit.getAnnotation(Patch.OnExit.class);
+        check(criticalScopeExitAdvice != null, "critical-chance scope exit must carry @Patch.OnExit");
+        check(
+            Throwable.class.equals(criticalScopeExitAdvice.onThrowable()),
+            "critical-chance scope must close after exceptions"
+        );
+
+        Method distanceEnter = FirearmAimingPatches.DistanceModifier.class.getDeclaredMethod(
+            "enter",
             float.class,
             float.class,
             float.class
         );
-        assertMutableReturn(distanceExit.getParameters()[2], "distance modifier");
+        assertArgument(distanceEnter.getParameters()[0], 0, false, "accuracy distance");
+        assertArgument(distanceEnter.getParameters()[1], 1, true, "minimum sight range");
+        assertArgument(distanceEnter.getParameters()[2], 2, true, "maximum sight range");
 
         Method delayExit = FirearmAimingPatches.AimDelayPenalty.class.getDeclaredMethod(
             "exit",
@@ -299,10 +327,11 @@ public final class FirearmAimingPatchTest {
             FirearmAimingPatches.AimingDelayUpdate.class,
             FirearmAimingPatches.PostShotAimingDelay.class,
             FirearmAimingPatches.HitChanceCalculationScope.class,
+            FirearmAimingPatches.CriticalChanceCalculationScope.class,
             FirearmAimingPatches.DistanceModifier.class,
             FirearmAimingPatches.AimDelayPenalty.class
         );
-        check(discovered.size() == expected.size(), "ZombieBuddy must discover exactly five patch classes");
+        check(discovered.size() == expected.size(), "ZombieBuddy must discover exactly six patch classes");
         for (Class<?> patchClass : expected) {
             check(discovered.contains(patchClass), "ZombieBuddy missed " + patchClass.getName());
         }

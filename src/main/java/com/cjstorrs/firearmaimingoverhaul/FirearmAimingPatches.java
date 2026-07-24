@@ -45,17 +45,30 @@ public final class FirearmAimingPatches {
         }
     }
 
+    @Patch(className = "zombie.characters.IsoPlayer", methodName = "calculateCritChance")
+    public static final class CriticalChanceCalculationScope {
+        @Patch.OnEnter
+        public static void enter(@Patch.This IsoPlayer player) {
+            FirearmAimRuntime.beginCriticalChanceCalculation(player);
+        }
+
+        @Patch.OnExit(onThrowable = Throwable.class)
+        public static void exit() {
+            FirearmAimRuntime.endAccuracyCalculation();
+        }
+    }
+
     @Patch(className = "zombie.CombatManager", methodName = "getDistanceModifier")
     public static final class DistanceModifier {
-        @Patch.OnExit
-        public static void exit(
-                @Patch.Argument(0) float distance,
-                @Patch.Argument(2) float maximumSightRange,
-                @Patch.Return(readOnly = false) float modifier) {
-            modifier = FirearmAimRuntime.removeBeyondSightDistancePenalty(
+        @Patch.OnEnter
+        public static void enter(
+                @Patch.Argument(value = 0, readOnly = false) float distance,
+                @Patch.Argument(1) float minimumSightRange,
+                @Patch.Argument(2) float maximumSightRange) {
+            distance = FirearmAimRuntime.normalizeBeyondSightAccuracyDistance(
                 distance,
-                maximumSightRange,
-                modifier
+                minimumSightRange,
+                maximumSightRange
             );
         }
     }

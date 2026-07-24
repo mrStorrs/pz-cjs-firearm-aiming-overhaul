@@ -100,6 +100,10 @@ public final class FirearmAimRuntime {
         }
     }
 
+    public static void beginCriticalChanceCalculation(IsoPlayer player) {
+        beginAccuracyCalculation(player, getAimedFirearm(player));
+    }
+
     public static void endAccuracyCalculation() {
         AccuracyScope scope = ACCURACY_SCOPE.get();
         if (scope.depth <= 1) {
@@ -111,11 +115,19 @@ public final class FirearmAimRuntime {
         }
     }
 
-    public static float removeBeyondSightDistancePenalty(
+    public static float normalizeBeyondSightAccuracyDistance(
             float distance,
-            float maximumSightRange,
-            float vanillaModifier) {
-        return isBeyondSightWithinPhysicalRange(distance, maximumSightRange) ? 0.0F : vanillaModifier;
+            float minimumSightRange,
+            float maximumSightRange) {
+        if (!isBeyondSightWithinPhysicalRange(distance, maximumSightRange)) {
+            return distance;
+        }
+
+        if (minimumSightRange < 0.0F || minimumSightRange >= maximumSightRange) {
+            return maximumSightRange;
+        }
+
+        return minimumSightRange + (maximumSightRange - minimumSightRange) * 0.5F;
     }
 
     public static float removeBeyondSightDelayScaling(

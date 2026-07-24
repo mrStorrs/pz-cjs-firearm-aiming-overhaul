@@ -7,7 +7,9 @@ tradeoff.
 ## Behavior
 
 - Inside `MaxSightRange`, stabilization and accuracy remain vanilla.
-- Beyond `MaxSightRange`, the permanent distance accuracy penalty is removed.
+- Beyond `MaxSightRange`, stabilized hit and critical accuracy converge on the
+  same optimal sight-band bonus available inside normal sight range instead
+  of stopping at a merely penalty-free but still-wide spread.
 - Stabilization takes progressively longer for each tile beyond effective
   sight, reaching 4x normal time after 10 additional tiles by default.
 - A firearm whose physical range ends sooner receives only the multiplier
@@ -56,7 +58,10 @@ maximum range exceeds its effective-sight range:
 2. Aim at zombies one, five, and ten tiles beyond effective sight and confirm
    the slowdown grows with absolute distance rather than the weapon's
    sight-to-maximum gap.
-3. Fully stabilize on a close zombie, move directly to a far zombie, and
+3. Confirm a stationary far target eventually reaches the same tightly
+   stabilized spread as a comparable target near the middle of normal sight
+   range.
+4. Fully stabilize on a close zombie, move directly to a far zombie, and
    confirm the crosshair reopens.
-4. Fire at long range and confirm recoil recovery follows the same slower
+5. Fire at long range and confirm recoil recovery follows the same slower
    timing.

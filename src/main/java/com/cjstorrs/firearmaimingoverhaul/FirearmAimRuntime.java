@@ -83,7 +83,10 @@ public final class FirearmAimRuntime {
             return 1.0F;
         }
 
-        float overRange = Math.min(1.0F, (distance - sightRange) / (physicalRange - sightRange));
+        float overRange = Math.min(
+            1.0F,
+            (distance - sightRange) / FirearmAimSettings.getFullPenaltyDistanceTiles()
+        );
         float maximumMultiplier = FirearmAimSettings.getMaximumMultiplier();
         float curveExponent = FirearmAimSettings.getCurveExponent();
         return 1.0F + (maximumMultiplier - 1.0F) * (float)Math.pow(overRange, curveExponent);

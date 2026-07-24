@@ -17,6 +17,8 @@ public final class FirearmAimingPatchTest {
 
     public static void main(String[] args) throws ReflectiveOperationException {
         testCurveDefaultsAndConfiguration();
+        testAbsoluteDistanceIgnoresSightToMaximumGap();
+        testTinySightToMaximumGapGetsSmallPenalty();
         testInsideSightRangeMatchesVanilla();
         testMaximumRangeTakesFourTimesAsLong();
         testMovingFartherReopensStabilization();
@@ -37,17 +39,70 @@ public final class FirearmAimingPatchTest {
         checkClose(1.0F, FirearmAimRuntime.calculateAimTimeMultiplier(player, weapon), "sight range");
 
         setTargetDistance(player, 10.0F);
-        checkClose(1.4582F, FirearmAimRuntime.calculateAimTimeMultiplier(player, weapon), "mid-near range");
+        checkClose(1.7589F, FirearmAimRuntime.calculateAimTimeMultiplier(player, weapon), "four tiles beyond sight");
 
         setTargetDistance(player, 15.0F);
-        checkClose(2.5464F, FirearmAimRuntime.calculateAimTimeMultiplier(player, weapon), "mid-far range");
+        checkClose(3.5614F, FirearmAimRuntime.calculateAimTimeMultiplier(player, weapon), "nine tiles beyond sight");
 
         setTargetDistance(player, 20.0F);
         checkClose(4.0F, FirearmAimRuntime.calculateAimTimeMultiplier(player, weapon), "maximum range");
 
-        SandboxOptions.instance.setOptionForTest(new SandboxOptions.DoubleSandboxOption(6.0));
+        SandboxOptions.instance.setOptionForTest(
+            "CJSFirearmAimingOverhaul.MaximumAimTimeMultiplier",
+            new SandboxOptions.DoubleSandboxOption(6.0)
+        );
         checkClose(6.0F, FirearmAimSettings.getMaximumMultiplier(), "configured maximum multiplier");
+        SandboxOptions.instance.setOptionForTest(
+            "CJSFirearmAimingOverhaul.FullPenaltyDistanceTiles",
+            new SandboxOptions.DoubleSandboxOption(5.0)
+        );
+        checkClose(5.0F, FirearmAimSettings.getFullPenaltyDistanceTiles(), "configured full-penalty distance");
         resetOptions();
+    }
+
+    private static void testAbsoluteDistanceIgnoresSightToMaximumGap() {
+        resetRuntime();
+        IsoPlayer player = createPlayer(10.0F);
+        HandWeapon weapon = (HandWeapon)player.getPrimaryHandItem();
+        setTargetDistance(player, 8.0F);
+        float wideGapMultiplier = FirearmAimRuntime.calculateAimTimeMultiplier(player, weapon);
+
+        weapon.setMaxSightRange(19.0F);
+        weapon.setMaxRange(25.0F);
+        setTargetDistance(player, 21.0F);
+        float narrowGapMultiplier = FirearmAimRuntime.calculateAimTimeMultiplier(player, weapon);
+
+        weapon.setMaxSightRange(8.0F);
+        weapon.setMaxRange(27.5F);
+        setTargetDistance(player, 10.0F);
+        float skillAdjustedMultiplier = FirearmAimRuntime.calculateAimTimeMultiplier(player, weapon);
+
+        checkClose(1.2683F, wideGapMultiplier, "two tiles beyond sight with a wide gap");
+        checkClose(
+            wideGapMultiplier,
+            narrowGapMultiplier,
+            "the same absolute distance beyond sight must have the same multiplier"
+        );
+        checkClose(
+            wideGapMultiplier,
+            skillAdjustedMultiplier,
+            "skill-adjusted sight and maximum ranges must still use absolute over-sight distance"
+        );
+    }
+
+    private static void testTinySightToMaximumGapGetsSmallPenalty() {
+        resetRuntime();
+        IsoPlayer player = createPlayer(10.0F);
+        HandWeapon weapon = (HandWeapon)player.getPrimaryHandItem();
+        weapon.setMaxSightRange(19.0F);
+        weapon.setMaxRange(20.0F);
+        setTargetDistance(player, 20.0F);
+
+        checkClose(
+            1.0949F,
+            FirearmAimRuntime.calculateAimTimeMultiplier(player, weapon),
+            "one-tile sight-to-maximum gap"
+        );
     }
 
     private static void testInsideSightRangeMatchesVanilla() {
@@ -287,7 +342,7 @@ public final class FirearmAimingPatchTest {
     }
 
     private static void resetOptions() {
-        SandboxOptions.instance.setOptionForTest(null);
+        SandboxOptions.instance.clearOptionsForTest();
     }
 
     private static void assertPatchTarget(Class<?> patchClass, String className, String methodName) {

@@ -8,8 +8,10 @@ tradeoff.
 
 - Inside `MaxSightRange`, stabilization and accuracy remain vanilla.
 - Beyond `MaxSightRange`, the permanent distance accuracy penalty is removed.
-- Stabilization takes progressively longer toward the firearm's actual
-  `MaxRange`, reaching 4x normal time at maximum range by default.
+- Stabilization takes progressively longer for each tile beyond effective
+  sight, reaching 4x normal time after 10 additional tiles by default.
+- A firearm whose physical range ends sooner receives only the multiplier
+  reached at that distance; a tiny sight-to-maximum gap is never forced to 4x.
 - Moving the reticle farther away reopens the crosshair according to the new
   required aim time. Moving closer keeps work already invested.
 - Post-shot recovery uses the same distance scaling.
@@ -19,11 +21,11 @@ tradeoff.
 The default multiplier is:
 
 ```text
-1 + 3 * ((distance - sightRange) / (maxRange - sightRange)) ^ 1.5
+1 + 3 * min(1, (distance - sightRange) / 10) ^ 1.5
 ```
 
-The maximum multiplier and curve exponent are configurable under
-**Sandbox > CJS Firearm Aiming Overhaul**.
+The maximum multiplier, curve exponent, and number of tiles needed to reach
+the maximum are configurable under **Sandbox > CJS Firearm Aiming Overhaul**.
 
 The patch applies only to aimed firearms. Optics and Aiming skill naturally
 move the boundary because the mod reads each live weapon's active
@@ -51,8 +53,9 @@ maximum range exceeds its effective-sight range:
 
 1. Aim at a zombie inside effective-sight range and confirm vanilla-speed
    stabilization.
-2. Aim at a zombie near maximum range and confirm the crosshair eventually
-   reaches full stabilization, but substantially more slowly.
+2. Aim at zombies one, five, and ten tiles beyond effective sight and confirm
+   the slowdown grows with absolute distance rather than the weapon's
+   sight-to-maximum gap.
 3. Fully stabilize on a close zombie, move directly to a far zombie, and
    confirm the crosshair reopens.
 4. Fire at long range and confirm recoil recovery follows the same slower

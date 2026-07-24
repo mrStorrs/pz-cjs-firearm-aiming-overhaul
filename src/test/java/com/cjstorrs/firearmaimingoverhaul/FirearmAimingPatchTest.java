@@ -19,6 +19,7 @@ public final class FirearmAimingPatchTest {
         testCurveDefaultsAndConfiguration();
         testAbsoluteDistanceIgnoresSightToMaximumGap();
         testTinySightToMaximumGapGetsSmallPenalty();
+        testExcessSightRangeSpeedsTargetAcquisition();
         testClosestTargetControlsAimTime();
         testInsideSightRangeMatchesVanilla();
         testMaximumRangeTakesFourTimesAsLong();
@@ -27,6 +28,7 @@ public final class FirearmAimingPatchTest {
         testPostShotRecoveryUsesDistanceScaling();
         testAccuracyChangesAreScopedToFirearms();
         testBeyondSightPenaltiesBecomeAdditionalAimTime();
+        testFullyStabilizedTargetIsGuaranteedToTakeDamage();
         testPatchMetadata();
         testZombieBuddyDiscovery();
         System.out.println("FirearmAimingPatchTest: PASS");
@@ -105,6 +107,42 @@ public final class FirearmAimingPatchTest {
             FirearmAimRuntime.calculateAimTimeMultiplier(player, weapon),
             "one-tile sight-to-maximum gap"
         );
+    }
+
+    private static void testExcessSightRangeSpeedsTargetAcquisition() {
+        resetRuntime();
+        IsoPlayer player = createPlayer(10.0F);
+        HandWeapon weapon = (HandWeapon)player.getPrimaryHandItem();
+        weapon.setMaxRange(10.0F);
+        setTargetDistance(player, 8.0F);
+
+        weapon.setMaxSightRange(10.0F);
+        checkClose(
+            1.0F,
+            FirearmAimRuntime.calculateAimTimeMultiplier(player, weapon),
+            "sight equal to physical range"
+        );
+
+        weapon.setMaxSightRange(11.0F);
+        checkClose(
+            0.9134F,
+            FirearmAimRuntime.calculateAimTimeMultiplier(player, weapon),
+            "one excess sight tile must provide a modest acquisition bonus"
+        );
+
+        weapon.setMaxSightRange(20.0F);
+        checkClose(
+            0.25F,
+            FirearmAimRuntime.calculateAimTimeMultiplier(player, weapon),
+            "ten excess sight tiles must reach the reciprocal maximum bonus"
+        );
+
+        for (int i = 0; i < 2; i++) {
+            runAimingUpdate(player, 1.0F);
+        }
+        check(player.getAimingDelay() > 0.0F, "maximum sight surplus must not stabilize before enough work");
+        runAimingUpdate(player, 1.0F);
+        checkClose(0.0F, player.getAimingDelay(), "maximum sight surplus must acquire in one quarter normal time");
     }
 
     private static void testClosestTargetControlsAimTime() {
@@ -353,6 +391,58 @@ public final class FirearmAimingPatchTest {
         );
     }
 
+    private static void testFullyStabilizedTargetIsGuaranteedToTakeDamage() {
+        resetRuntime();
+        IsoPlayer player = createPlayer(10.0F);
+        setTargetDistance(player, 5.0F);
+        HitInfo primaryTarget = player.getHitInfoList().get(0);
+        primaryTarget.chance = 20;
+        HitInfo secondaryTarget = new HitInfo(36.0F);
+        secondaryTarget.chance = 15;
+        player.getHitInfoList().add(secondaryTarget);
+
+        FirearmAimRuntime.guaranteeFullyStabilizedHit(player);
+        check(primaryTarget.chance == 20, "an unstabilized target must keep its vanilla hit chance");
+
+        for (int i = 0; i < 10; i++) {
+            runAimingUpdate(player, 1.0F);
+        }
+        FirearmAimRuntime.guaranteeFullyStabilizedHit(player);
+        check(primaryTarget.chance == 100, "the fully stabilized primary target must have 100 hit chance");
+        check(secondaryTarget.chance == 15, "full lock must not guarantee every shotgun or piercing target");
+
+        setTargetDistance(player, 20.0F);
+        HitInfo farTarget = player.getHitInfoList().get(0);
+        farTarget.chance = 20;
+        FirearmAimRuntime.guaranteeFullyStabilizedHit(player);
+        check(farTarget.chance == 20, "moving a completed lock farther away must reopen it before guaranteeing damage");
+
+        for (int i = 0; i < 30; i++) {
+            runAimingUpdate(player, 1.0F);
+        }
+        FirearmAimRuntime.guaranteeFullyStabilizedHit(player);
+        check(farTarget.chance == 100, "a fully completed far lock must guarantee damage");
+
+        FirearmAimRuntime.beginAccuracyCalculation(player, (HandWeapon)player.getPrimaryHandItem());
+        FirearmAimRuntime.normalizeBeyondSightAccuracyDistance(20.0F, 2.0F, 6.0F);
+        FirearmAimRuntime.convertBeyondSightPermanentPenalty(10.0F);
+        FirearmAimRuntime.endAccuracyCalculation();
+        farTarget.chance = 20;
+        FirearmAimRuntime.guaranteeFullyStabilizedHit(player);
+        check(farTarget.chance == 20, "new recoverable penalties must reopen full lock before guaranteeing damage");
+
+        for (int i = 0; i < 10; i++) {
+            runAimingUpdate(player, 1.0F);
+        }
+        FirearmAimRuntime.guaranteeFullyStabilizedHit(player);
+        check(farTarget.chance == 100, "recovered condition penalties must permit guaranteed damage again");
+
+        player.setAiming(false);
+        farTarget.chance = 20;
+        FirearmAimRuntime.guaranteeFullyStabilizedHit(player);
+        check(farTarget.chance == 20, "the guarantee must apply only while actively aiming");
+    }
+
     private static void testPatchMetadata() throws ReflectiveOperationException {
         assertPatchTarget(
             FirearmAimingPatches.AimingDelayUpdate.class,
@@ -363,6 +453,11 @@ public final class FirearmAimingPatchTest {
             FirearmAimingPatches.PostShotAimingDelay.class,
             "zombie.CombatManager",
             "setAimingDelay"
+        );
+        assertPatchTarget(
+            FirearmAimingPatches.FullyStabilizedHitChance.class,
+            "zombie.CombatManager",
+            "calculateHitInfoList"
         );
         assertPatchTarget(
             FirearmAimingPatches.HitChanceCalculationScope.class,
@@ -422,6 +517,12 @@ public final class FirearmAimingPatchTest {
         );
         assertArgument(postShotExit.getParameters()[0], 0, true, "post-shot player");
 
+        Method stabilizedHitExit = FirearmAimingPatches.FullyStabilizedHitChance.class.getDeclaredMethod(
+            "exit",
+            IsoGameCharacter.class
+        );
+        assertArgument(stabilizedHitExit.getParameters()[0], 0, true, "fully stabilized hit owner");
+
         Method scopeExit = FirearmAimingPatches.HitChanceCalculationScope.class.getDeclaredMethod("exit");
         Patch.OnExit scopeExitAdvice = scopeExit.getAnnotation(Patch.OnExit.class);
         check(scopeExitAdvice != null, "accuracy scope exit must carry @Patch.OnExit");
@@ -477,6 +578,7 @@ public final class FirearmAimingPatchTest {
         List<Class<?>> expected = List.of(
             FirearmAimingPatches.AimingDelayUpdate.class,
             FirearmAimingPatches.PostShotAimingDelay.class,
+            FirearmAimingPatches.FullyStabilizedHitChance.class,
             FirearmAimingPatches.HitChanceCalculationScope.class,
             FirearmAimingPatches.CriticalChanceCalculationScope.class,
             FirearmAimingPatches.DistanceModifier.class,
@@ -487,7 +589,7 @@ public final class FirearmAimingPatchTest {
             FirearmAimingPatches.MoodlesPenalty.class,
             FirearmAimingPatches.VisionPenalty.class
         );
-        check(discovered.size() == expected.size(), "ZombieBuddy must discover exactly eleven patch classes");
+        check(discovered.size() == expected.size(), "ZombieBuddy must discover exactly twelve patch classes");
         for (Class<?> patchClass : expected) {
             check(discovered.contains(patchClass), "ZombieBuddy missed " + patchClass.getName());
         }

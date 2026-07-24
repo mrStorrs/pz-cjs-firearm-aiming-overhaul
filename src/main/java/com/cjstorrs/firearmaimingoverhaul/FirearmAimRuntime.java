@@ -84,24 +84,33 @@ public final class FirearmAimRuntime {
         float distance = (float)Math.sqrt(Math.max(0.0F, minimumDistanceSquared));
         float sightRange = weapon.getMaxSightRange(character);
         float physicalRange = getPhysicalRange(character, weapon);
+        if (sightRange > physicalRange + RANGE_EPSILON) {
+            return 1.0F / calculateRangeCurveMultiplier(sightRange - physicalRange);
+        }
         if (distance <= sightRange || physicalRange <= sightRange + RANGE_EPSILON) {
             return 1.0F;
         }
 
-        float overRange = Math.min(
-            1.0F,
-            (distance - sightRange) / FirearmAimSettings.getFullPenaltyDistanceTiles()
-        );
-        float maximumMultiplier = FirearmAimSettings.getMaximumMultiplier();
-        float curveExponent = FirearmAimSettings.getCurveExponent();
-        float distanceMultiplier =
-            1.0F + (maximumMultiplier - 1.0F) * (float)Math.pow(overRange, curveExponent);
+        float distanceMultiplier = calculateRangeCurveMultiplier(distance - sightRange);
         AimState state = AIM_STATES.get(character);
         if (state == null || state.weapon != weapon) {
             return distanceMultiplier;
         }
 
         return distanceMultiplier + state.recoverablePenalty / state.baseDelay;
+    }
+
+    public static void guaranteeFullyStabilizedHit(IsoGameCharacter character) {
+        if (!character.isAiming() || getAimedFirearm(character) == null) {
+            return;
+        }
+
+        PZArrayList<HitInfo> hitInfoList = character.getHitInfoList();
+        if (hitInfoList == null || hitInfoList.isEmpty() || !isFullyStabilized(character)) {
+            return;
+        }
+
+        hitInfoList.get(0).chance = 100;
     }
 
     public static void beginAccuracyCalculation(IsoGameCharacter owner, HandWeapon weapon) {
@@ -224,6 +233,28 @@ public final class FirearmAimRuntime {
 
     private static float getPhysicalRange(IsoGameCharacter character, HandWeapon weapon) {
         return weapon.getMaxRange(character) * weapon.getRangeMod(character);
+    }
+
+    private static float calculateRangeCurveMultiplier(float rangeDifference) {
+        float curveProgress = Math.min(
+            1.0F,
+            Math.max(0.0F, rangeDifference) / FirearmAimSettings.getFullPenaltyDistanceTiles()
+        );
+        return 1.0F
+            + (FirearmAimSettings.getMaximumMultiplier() - 1.0F)
+                * (float)Math.pow(curveProgress, FirearmAimSettings.getCurveExponent());
+    }
+
+    private static boolean isFullyStabilized(IsoGameCharacter character) {
+        AimState state = AIM_STATES.get(character);
+        HandWeapon weapon = getAimedFirearm(character);
+        if (state == null || state.weapon != weapon) {
+            return character.getAimingDelay() <= MINIMUM_DELAY;
+        }
+
+        state.consumePendingPenalty();
+        state.multiplier = calculateAimTimeMultiplier(character, weapon);
+        return state.getRemainingWork() <= MINIMUM_DELAY;
     }
 
     private static boolean isBeyondSightWithinPhysicalRange(float distance, float maximumSightRange) {

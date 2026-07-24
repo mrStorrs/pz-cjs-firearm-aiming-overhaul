@@ -6,7 +6,7 @@ public final class Main {
 
     public static void main(String[] args) {
         System.out.println(
-            "[cjsFirearmAimingOverhaul] Loading v1.3.0 distance and penalty-to-time stabilization patches."
+            "[cjsFirearmAimingOverhaul] Loading v1.4.0 stabilization, sight-surplus, and full-lock patches."
         );
     }
 }

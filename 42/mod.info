@@ -1,9 +1,9 @@
 name=CJS Firearm Aiming Overhaul
 id=cjsFirearmAimingOverhaul
-description=Replaces permanent beyond-sight firearm inaccuracy with progressively longer stabilization time.
+description=Converts range into stabilization time, rewards excess sight, and makes full lock guarantee damaging hits.
 poster=poster.png
 author=CJ Storrs
-modversion=1.3.0
+modversion=1.4.0
 versionMin=42.19.0
 require=\ZombieBuddy
 javaJarFile=media/java/CJSFirearmAimingOverhaul.jar

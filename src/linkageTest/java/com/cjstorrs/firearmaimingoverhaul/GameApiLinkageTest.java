@@ -13,6 +13,7 @@ public final class GameApiLinkageTest {
         Class<?> isoPlayer = load(loader, "zombie.characters.IsoPlayer");
         Class<?> handWeapon = load(loader, "zombie.inventory.types.HandWeapon");
         Class<?> hitInfo = load(loader, "zombie.network.fields.hit.HitInfo");
+        Class<?> ballisticsController = load(loader, "zombie.core.physics.BallisticsController");
         Class<?> isoGridSquare = load(loader, "zombie.iso.IsoGridSquare");
         Class<?> pzArrayList = load(loader, "zombie.util.list.PZArrayList");
 
@@ -23,6 +24,10 @@ public final class GameApiLinkageTest {
         requireMethod(isoGameCharacter, "isAiming");
         requireMethod(isoGameCharacter, "getPrimaryHandItem");
         check(
+            requireMethod(isoGameCharacter, "getBallisticsController").getReturnType() == ballisticsController,
+            "ballistics-controller return type"
+        );
+        check(
             requireMethod(isoGameCharacter, "getWornItemsVisionModifier").getReturnType() == float.class,
             "vision modifier return type"
         );
@@ -32,6 +37,7 @@ public final class GameApiLinkageTest {
         );
 
         requireMethod(combatManager, "setAimingDelay", isoPlayer, handWeapon);
+        requireMethod(combatManager, "calculateHitInfoList", isoGameCharacter);
         requireMethod(combatManager, "calculateHitChanceData", isoGameCharacter, handWeapon, hitInfo);
         check(
             requireMethod(combatManager, "getDistanceModifier", float.class, float.class, float.class, boolean.class)
@@ -76,6 +82,15 @@ public final class GameApiLinkageTest {
             "range modifier return type"
         );
         hitInfo.getField("distSq");
+        check(hitInfo.getField("chance").getType() == int.class, "hit chance field type");
+        check(
+            requireMethod(ballisticsController, "isCameraTarget", int.class).getReturnType() == boolean.class,
+            "camera-target return type"
+        );
+        check(
+            requireMethod(ballisticsController, "getCachedTargetedBodyPart", int.class).getReturnType() == int.class,
+            "targeted-body-part return type"
+        );
 
         Class<?> sandboxOptions = load(loader, "zombie.SandboxOptions");
         Class<?> sandboxOption = load(loader, "zombie.SandboxOptions$SandboxOption");
@@ -90,6 +105,7 @@ public final class GameApiLinkageTest {
         requireMethod(runtime, "beforeAimingDelayUpdate", isoGameCharacter);
         requireMethod(runtime, "afterAimingDelayUpdate", isoGameCharacter);
         requireMethod(runtime, "synchronizePostShotDelay", isoPlayer);
+        requireMethod(runtime, "guaranteeFullyStabilizedHit", isoGameCharacter);
         requireMethod(runtime, "beginAccuracyCalculation", isoGameCharacter, handWeapon);
         requireMethod(runtime, "beginCriticalChanceCalculation", isoPlayer);
         requireMethod(runtime, "endAccuracyCalculation");

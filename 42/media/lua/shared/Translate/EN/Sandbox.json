@@ -1,9 +1,9 @@
 {
   "Sandbox_CJSFirearmAimingOverhaul": "CJS Firearm Aiming Overhaul",
   "Sandbox_CJSFirearmAimingOverhaul_MaximumAimTimeMultiplier": "Maximum Distance Aim-Time Multiplier",
-  "Sandbox_CJSFirearmAimingOverhaul_MaximumAimTimeMultiplier_tooltip": "Highest distance-only aim-time multiplier, reached after the configured number of tiles beyond effective-sight range. Recoverable condition penalties can add more stabilization work. A weapon whose physical range ends sooner receives a smaller distance penalty. Default: 4.0.",
+  "Sandbox_CJSFirearmAimingOverhaul_MaximumAimTimeMultiplier_tooltip": "Highest distance-only aim-time multiplier, reached after the configured number of tiles beyond effective-sight range. If effective sight exceeds physical range, the reciprocal curve speeds acquisition instead. Recoverable condition penalties can add more stabilization work. Default: 4.0.",
   "Sandbox_CJSFirearmAimingOverhaul_CurveExponent": "Aim-Time Curve",
   "Sandbox_CJSFirearmAimingOverhaul_CurveExponent_tooltip": "Controls how quickly extra aim time ramps up beyond effective-sight range. Higher values keep the increase gentler near sight range and steeper near the full-penalty distance. Default: 1.5.",
   "Sandbox_CJSFirearmAimingOverhaul_FullPenaltyDistanceTiles": "Tiles to Maximum Aim Time",
-  "Sandbox_CJSFirearmAimingOverhaul_FullPenaltyDistanceTiles_tooltip": "Number of tiles beyond effective-sight range required to reach the maximum aim-time multiplier. Weapons whose physical range ends before this distance never reach the maximum. Default: 10."
+  "Sandbox_CJSFirearmAimingOverhaul_FullPenaltyDistanceTiles_tooltip": "Absolute sight-to-target distance required to reach the maximum slowdown, or absolute sight surplus required to reach its reciprocal speed bonus. Default: 10."
 }

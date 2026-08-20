@@ -42,6 +42,8 @@ public final class FirearmAimRuntime {
     private static final AtomicLong SHOT_IDS = new AtomicLong();
     private static final Map<IsoGameCharacter, AimState> AIM_STATES =
         Collections.synchronizedMap(new WeakHashMap<>());
+    private static final Map<IsoGameCharacter, TargetProfile> RETICLE_TARGETS =
+        Collections.synchronizedMap(new WeakHashMap<>());
     private static final ThreadLocal<AccuracyScope> ACCURACY_SCOPE =
         ThreadLocal.withInitial(AccuracyScope::new);
     private static final ThreadLocal<ShotScope> SHOT_SCOPE =
@@ -54,6 +56,7 @@ public final class FirearmAimRuntime {
         HandWeapon weapon = getAimedFirearm(character);
         if (!character.isAiming() || weapon == null) {
             AIM_STATES.remove(character);
+            RETICLE_TARGETS.remove(character);
             return;
         }
 
@@ -294,6 +297,14 @@ public final class FirearmAimRuntime {
         }
     }
 
+    public static void captureReticleTarget(IsoPlayer player) {
+        if (!player.isAiming() || getAimedFirearm(player) == null) {
+            RETICLE_TARGETS.remove(player);
+            return;
+        }
+        RETICLE_TARGETS.put(player, getLivePrimaryTarget(player));
+    }
+
     public static void beginAccuracyCalculation(
             IsoGameCharacter owner,
             HandWeapon weapon,
@@ -491,6 +502,7 @@ public final class FirearmAimRuntime {
 
     static void resetForTest() {
         AIM_STATES.clear();
+        RETICLE_TARGETS.clear();
         ACCURACY_SCOPE.remove();
         SHOT_SCOPE.remove();
         SHOT_IDS.set(0L);
@@ -628,9 +640,14 @@ public final class FirearmAimRuntime {
     }
 
     private static TargetProfile getPrimaryTarget(IsoGameCharacter character) {
+        TargetProfile reticleTarget = RETICLE_TARGETS.get(character);
+        return reticleTarget == null ? getLivePrimaryTarget(character) : reticleTarget;
+    }
+
+    private static TargetProfile getLivePrimaryTarget(IsoGameCharacter character) {
         PZArrayList<HitInfo> hitInfoList = character.getHitInfoList();
         if (hitInfoList == null || hitInfoList.isEmpty()) {
-            return TargetProfile.NONE;
+            return getPrimaryCameraTarget(character);
         }
 
         HitInfo hitInfo = hitInfoList.get(0);
@@ -657,6 +674,40 @@ public final class FirearmAimRuntime {
             hitDistance,
             hitPointDistance,
             objectDistance
+        );
+    }
+
+    private static TargetProfile getPrimaryCameraTarget(IsoGameCharacter character) {
+        BallisticsController ballistics = character.getBallisticsController();
+        if (ballistics == null) {
+            return TargetProfile.NONE;
+        }
+
+        float[] cameraTargets = ballistics.getCameraTargets();
+        int targetCount = Math.min(
+            ballistics.getNumberOfCameraTargets(),
+            cameraTargets == null ? 0 : cameraTargets.length / 5
+        );
+        if (targetCount <= 0) {
+            return TargetProfile.NONE;
+        }
+
+        int targetId = (int)cameraTargets[0];
+        float targetX = cameraTargets[1];
+        float targetY = cameraTargets[3];
+        if (!Float.isFinite(targetX) || !Float.isFinite(targetY)) {
+            return TargetProfile.NONE;
+        }
+        float deltaX = targetX - character.getX();
+        float deltaY = targetY - character.getY();
+        float distance = (float)Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+        return new TargetProfile(
+            OBJECT_TARGET_NAMESPACE | (targetId & 0xffffffffL),
+            distance,
+            "camera_target",
+            Float.NaN,
+            distance,
+            Float.NaN
         );
     }
 

@@ -168,7 +168,9 @@ reroutes failed-roll head targeting before this mod records the body part, so a
 reduced-damage graze cannot become lethal.
 
 Target identity comes from the primary `HitInfo` object's stable moving-object
-ID. Changing distance on the same zombie preserves absolute work; changing
+ID. At maximum range, where B42.20 can omit a `HitInfo`, acquisition instead
+uses the first resolved camera-ballistics target from the completed reticle
+update. Changing distance on the same zombie preserves absolute work; changing
 zombies applies the retention and minimum-reacquisition rules.
 
 After a shot, vanilla first adds its recoil and aiming delay. The mod converts

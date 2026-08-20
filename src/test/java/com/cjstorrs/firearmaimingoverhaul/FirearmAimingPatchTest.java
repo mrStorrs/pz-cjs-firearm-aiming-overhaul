@@ -28,6 +28,7 @@ public final class FirearmAimingPatchTest {
         testWeaponChangeUsesTheNewWeaponAimingTime();
         testPhysicalTargetDistanceOverridesBowBallisticsHitDistance();
         testResolvedHitPointDistanceOverridesBowProxyPosition();
+        testReticleCameraTargetProvidesMaximumRangeWithoutHitInfo();
         testFarAimAddsSecondsInsteadOfMultiplyingTinyTimers();
         testExcessSightBonusIsCapped();
         testConditionsBecomeAimTimeAtEveryRange();
@@ -251,6 +252,26 @@ public final class FirearmAimingPatchTest {
             "a bow's far target must use B42.20's resolved ballistic hit point"
         );
         checkClose(0.25F, hitInfo.distSq, "test must preserve the bad ballistic hit distance");
+    }
+
+    private static void testReticleCameraTargetProvidesMaximumRangeWithoutHitInfo() {
+        resetRuntime();
+        IsoPlayer player = createPlayer(65.0F, 0);
+        HandWeapon bow = (HandWeapon)player.getPrimaryHandItem();
+        bow.setFullType("cjsSimpleBows.SB_Bow_crafted");
+        bow.setAimingTime(65);
+        bow.setMaxSightRange(6.0F);
+        bow.setMaxRange(16.0F);
+        BallisticsController ballistics = new BallisticsController();
+        ballistics.setCameraTargetForTest(1, 16.0F, 0.0F, RagdollBodyPart.BODYPART_HEAD.ordinal());
+        player.setBallisticsController(ballistics);
+
+        FirearmAimRuntime.captureReticleTarget(player);
+        checkClose(
+            150.0F,
+            FirearmAimRuntime.calculateRequiredAimWork(player, bow),
+            "a maximum-range camera target must not fall back to the bow's bare timer"
+        );
     }
 
     private static void testFarAimAddsSecondsInsteadOfMultiplyingTinyTimers() {
@@ -899,6 +920,11 @@ public final class FirearmAimingPatchTest {
             "calculateHitInfoList"
         );
         assertPatchTarget(
+            FirearmAimingPatches.ReticleTargetCapture.class,
+            "zombie.CombatManager",
+            "updateReticle"
+        );
+        assertPatchTarget(
             FirearmAimingPatches.HitChanceCalculationScope.class,
             "zombie.CombatManager",
             "calculateHitChanceData"
@@ -1040,6 +1066,7 @@ public final class FirearmAimingPatchTest {
             FirearmAimingPatches.LethalHeadshot.class,
             FirearmAimingPatches.ShotCleanup.class,
             FirearmAimingPatches.StabilizationHitChance.class,
+            FirearmAimingPatches.ReticleTargetCapture.class,
             FirearmAimingPatches.HitChanceCalculationScope.class,
             FirearmAimingPatches.CriticalChanceCalculationScope.class,
             FirearmAimingPatches.DistanceModifier.class,

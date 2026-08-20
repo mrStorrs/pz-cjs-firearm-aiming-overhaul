@@ -87,8 +87,15 @@ public final class FirearmAimingPatches {
     public static final class StabilizationHitChance {
         @Patch.OnExit
         public static void exit(@Patch.Argument(0) IsoGameCharacter owner) {
-            FirearmAimRuntime.synchronizeTargetAcquisition(owner);
             FirearmAimRuntime.promoteStabilizationHitChance(owner);
+        }
+    }
+
+    @Patch(className = "zombie.CombatManager", methodName = "updateReticle")
+    public static final class LiveReticleTargetSync {
+        @Patch.OnExit
+        public static void exit(@Patch.Argument(0) IsoPlayer player) {
+            FirearmAimRuntime.synchronizeTargetAcquisition(player);
         }
     }
 

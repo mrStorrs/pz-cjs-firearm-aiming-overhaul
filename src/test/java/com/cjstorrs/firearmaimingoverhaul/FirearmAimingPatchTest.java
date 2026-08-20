@@ -925,6 +925,11 @@ public final class FirearmAimingPatchTest {
             "calculateHitInfoList"
         );
         assertPatchTarget(
+            FirearmAimingPatches.LiveReticleTargetSync.class,
+            "zombie.CombatManager",
+            "updateReticle"
+        );
+        assertPatchTarget(
             FirearmAimingPatches.HitChanceCalculationScope.class,
             "zombie.CombatManager",
             "calculateHitChanceData"
@@ -1066,6 +1071,7 @@ public final class FirearmAimingPatchTest {
             FirearmAimingPatches.LethalHeadshot.class,
             FirearmAimingPatches.ShotCleanup.class,
             FirearmAimingPatches.StabilizationHitChance.class,
+            FirearmAimingPatches.LiveReticleTargetSync.class,
             FirearmAimingPatches.HitChanceCalculationScope.class,
             FirearmAimingPatches.CriticalChanceCalculationScope.class,
             FirearmAimingPatches.DistanceModifier.class,

@@ -80,6 +80,7 @@ public final class GameApiLinkageTest {
             boolean.class
         );
         requireMethod(combatManager, "calculateHitInfoList", isoGameCharacter);
+        requireMethod(combatManager, "updateReticle", isoPlayer);
         requireMethod(combatManager, "calculateHitChanceData", isoGameCharacter, handWeapon, hitInfo);
         check(
             requireMethod(combatManager, "getDistanceModifier", float.class, float.class, float.class, boolean.class)

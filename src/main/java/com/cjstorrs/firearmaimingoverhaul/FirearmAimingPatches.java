@@ -5,6 +5,7 @@ import zombie.characters.IsoGameCharacter;
 import zombie.characters.IsoPlayer;
 import zombie.core.physics.RagdollBodyPart;
 import zombie.inventory.types.HandWeapon;
+import zombie.inventory.types.WeaponPart;
 import zombie.network.fields.hit.HitInfo;
 
 public final class FirearmAimingPatches {
@@ -189,6 +190,26 @@ public final class FirearmAimingPatches {
         @Patch.OnExit
         public static void exit(@Patch.Return(readOnly = false) float modifier) {
             modifier = FirearmAimRuntime.convertRecoverableVisionModifier(modifier);
+        }
+    }
+
+    @Patch(className = "zombie.inventory.types.WeaponPart", methodName = "getHitChance")
+    public static final class LaserHitChance {
+        @Patch.OnExit
+        public static void exit(
+                @Patch.This WeaponPart part,
+                @Patch.Return(readOnly = false) int hitChance) {
+            hitChance = FirearmAimRuntime.adjustWeaponPartHitChance(part, hitChance);
+        }
+    }
+
+    @Patch(className = "zombie.inventory.types.WeaponPart", methodName = "getAimingTime")
+    public static final class LaserAimingTime {
+        @Patch.OnExit
+        public static void exit(
+                @Patch.This WeaponPart part,
+                @Patch.Return(readOnly = false) int aimingTime) {
+            aimingTime = FirearmAimRuntime.adjustWeaponPartAimingTime(part, aimingTime);
         }
     }
 }

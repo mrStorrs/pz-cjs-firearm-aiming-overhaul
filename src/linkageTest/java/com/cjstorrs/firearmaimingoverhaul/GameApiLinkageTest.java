@@ -15,6 +15,7 @@ public final class GameApiLinkageTest {
         Class<?> perks = load(loader, "zombie.characters.skills.PerkFactory$Perks");
         Class<?> inventoryItem = load(loader, "zombie.inventory.InventoryItem");
         Class<?> handWeapon = load(loader, "zombie.inventory.types.HandWeapon");
+        Class<?> weaponPart = load(loader, "zombie.inventory.types.WeaponPart");
         Class<?> hitInfo = load(loader, "zombie.network.fields.hit.HitInfo");
         Class<?> isoMovingObject = load(loader, "zombie.iso.IsoMovingObject");
         Class<?> ballisticsController = load(loader, "zombie.core.physics.BallisticsController");
@@ -125,6 +126,8 @@ public final class GameApiLinkageTest {
             "range modifier return type"
         );
         check(requireMethod(inventoryItem, "getFullType").getReturnType() == String.class, "weapon full type");
+        check(requireMethod(weaponPart, "getHitChance").getReturnType() == int.class, "weapon-part hit chance");
+        check(requireMethod(weaponPart, "getAimingTime").getReturnType() == int.class, "weapon-part aiming time");
         hitInfo.getField("distSq");
         check(hitInfo.getField("x").getType() == float.class, "hit-point x type");
         check(hitInfo.getField("y").getType() == float.class, "hit-point y type");

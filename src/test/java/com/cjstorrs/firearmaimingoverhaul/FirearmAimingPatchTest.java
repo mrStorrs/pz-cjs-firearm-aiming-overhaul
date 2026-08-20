@@ -14,6 +14,7 @@ import zombie.characters.IsoPlayer;
 import zombie.core.physics.BallisticsController;
 import zombie.core.physics.RagdollBodyPart;
 import zombie.inventory.types.HandWeapon;
+import zombie.inventory.types.WeaponPart;
 import zombie.iso.IsoMovingObject;
 import zombie.network.fields.hit.HitInfo;
 
@@ -40,6 +41,7 @@ public final class FirearmAimingPatchTest {
         testFullyStabilizedTargetedHeadshotsAreLethal();
         testHeadshotDiagnosticsExplainDecision();
         testAccuracyChangesAreScopedToValidTargets();
+        testLaserAndDobermanAimingAdjustments();
         testPatchMetadata();
         testZombieBuddyDiscovery();
         System.out.println("FirearmAimingPatchTest: PASS");
@@ -966,6 +968,16 @@ public final class FirearmAimingPatchTest {
             "zombie.characters.IsoGameCharacter",
             "getWornItemsVisionModifier"
         );
+        assertPatchTarget(
+            FirearmAimingPatches.LaserHitChance.class,
+            "zombie.inventory.types.WeaponPart",
+            "getHitChance"
+        );
+        assertPatchTarget(
+            FirearmAimingPatches.LaserAimingTime.class,
+            "zombie.inventory.types.WeaponPart",
+            "getAimingTime"
+        );
 
         Method scopeEnter = FirearmAimingPatches.HitChanceCalculationScope.class.getDeclaredMethod(
             "enter",
@@ -1071,12 +1083,53 @@ public final class FirearmAimingPatchTest {
             FirearmAimingPatches.PainPenalty.class,
             FirearmAimingPatches.WeatherPenalty.class,
             FirearmAimingPatches.MoodlesPenalty.class,
-            FirearmAimingPatches.VisionPenalty.class
+            FirearmAimingPatches.VisionPenalty.class,
+            FirearmAimingPatches.LaserHitChance.class,
+            FirearmAimingPatches.LaserAimingTime.class
         );
         check(discovered.size() == expected.size(), "ZombieBuddy must discover every aiming patch");
         for (Class<?> patchClass : expected) {
             check(discovered.contains(patchClass), "ZombieBuddy missed " + patchClass.getName());
         }
+    }
+
+    private static void testLaserAndDobermanAimingAdjustments() {
+        resetRuntime();
+        WeaponPart laser = new WeaponPart();
+        laser.setFullType("Base.Laser");
+        check(
+            FirearmAimRuntime.adjustWeaponPartHitChance(laser, 5) == 0,
+            "laser must not add hit chance"
+        );
+        check(
+            FirearmAimRuntime.adjustWeaponPartAimingTime(laser, -10) == -3,
+            "laser must have only a small aiming-time benefit"
+        );
+
+        WeaponPart otherPart = new WeaponPart();
+        otherPart.setFullType("Base.RedDot");
+        check(
+            FirearmAimRuntime.adjustWeaponPartHitChance(otherPart, 2) == 2,
+            "non-laser hit chance must remain unchanged"
+        );
+        check(
+            FirearmAimRuntime.adjustWeaponPartAimingTime(otherPart, -4) == -4,
+            "non-laser aiming time must remain unchanged"
+        );
+
+        IsoPlayer standardPlayer = createPlayer(20.0F, 0);
+        IsoPlayer steadyAimPlayer = createPlayer(20.0F, 0);
+        steadyAimPlayer.setBooleanVariableForTest("CJS_DobermanSteadyAim", true);
+        IsoMovingObject target = new IsoMovingObject();
+        target.setX(3.0F);
+        setTarget(standardPlayer, 3.0F, target);
+        setTarget(steadyAimPlayer, 3.0F, target);
+        FirearmAimRuntime.beforeAimingDelayUpdate(standardPlayer);
+        FirearmAimRuntime.beforeAimingDelayUpdate(steadyAimPlayer);
+        check(
+            steadyAimPlayer.getAimingDelay() < standardPlayer.getAimingDelay(),
+            "Doberman steady aim must shorten acquisition without changing recoil"
+        );
     }
 
     private static IsoPlayer createPlayer(float aimingDelay, int aimingLevel) {

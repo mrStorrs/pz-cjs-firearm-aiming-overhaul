@@ -12,8 +12,10 @@ import zombie.core.physics.BallisticsController;
 import zombie.core.physics.RagdollBodyPart;
 import zombie.inventory.InventoryItem;
 import zombie.inventory.types.HandWeapon;
+import zombie.inventory.types.WeaponPart;
 import zombie.iso.IsoMovingObject;
 import zombie.network.fields.hit.HitInfo;
+import zombie.core.skinnedmodel.advancedanimation.IAnimationVariableSlot;
 import zombie.util.list.PZArrayList;
 
 public final class FirearmAimRuntime {
@@ -34,6 +36,10 @@ public final class FirearmAimRuntime {
     private static final float RECOIL_REOPEN_PER_LEVEL = 0.02F;
     private static final float EXCESS_SIGHT_BONUS_PER_TILE = 0.02F;
     private static final float MINIMUM_EXCESS_SIGHT_ACQUISITION_MULTIPLIER = 0.80F;
+    private static final float DOBERMAN_STEADY_AIM_SPEED_MULTIPLIER = 1.08F;
+    private static final String DOBERMAN_STEADY_AIM_VARIABLE = "CJS_DobermanSteadyAim";
+    private static final String LASER_PART_TYPE = "Base.Laser";
+    private static final int LASER_AIMING_TIME_MODIFIER = -3;
     private static final long NO_TARGET_KEY = 0L;
     private static final long OBJECT_TARGET_NAMESPACE = 1L << 62;
     private static final long HIT_INFO_TARGET_NAMESPACE = 1L << 61;
@@ -601,7 +607,7 @@ public final class FirearmAimRuntime {
             target.distance,
             sightRange,
             physicalRange
-        ) * workRate;
+        ) * workRate / getAcquisitionSpeedMultiplier(character);
         float conditionWork = calculateConditionSeconds(
             aimingLevel,
             state.recoverablePenalty
@@ -716,6 +722,33 @@ public final class FirearmAimRuntime {
 
     private static float getWorkRate(int aimingLevel) {
         return VANILLA_WORK_PER_SECOND * (1.0F + 0.05F * clampAimingLevel(aimingLevel));
+    }
+
+    public static int adjustWeaponPartHitChance(WeaponPart part, int hitChance) {
+        return isLaserPart(part) ? 0 : hitChance;
+    }
+
+    public static int adjustWeaponPartAimingTime(WeaponPart part, int aimingTime) {
+        return isLaserPart(part) ? LASER_AIMING_TIME_MODIFIER : aimingTime;
+    }
+
+    private static float getAcquisitionSpeedMultiplier(IsoGameCharacter character) {
+        return hasEnabledBooleanVariable(character, DOBERMAN_STEADY_AIM_VARIABLE)
+            ? DOBERMAN_STEADY_AIM_SPEED_MULTIPLIER
+            : 1.0F;
+    }
+
+    private static boolean hasEnabledBooleanVariable(IsoGameCharacter character, String key) {
+        for (IAnimationVariableSlot variable : character.getGameVariables()) {
+            if (key.equals(variable.getKey()) && variable.getValueBool()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean isLaserPart(WeaponPart part) {
+        return part != null && LASER_PART_TYPE.equals(part.getFullType());
     }
 
     private static float clamp01(float value) {

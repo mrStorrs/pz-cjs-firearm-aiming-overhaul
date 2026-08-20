@@ -180,6 +180,7 @@ public final class GameApiLinkageTest {
         );
         requireMethod(runtime, "endShot");
         requireMethod(runtime, "promoteStabilizationHitChance", isoGameCharacter);
+        requireMethod(runtime, "synchronizeTargetAcquisition", isoGameCharacter);
         requireMethod(runtime, "beginAccuracyCalculation", isoGameCharacter, handWeapon, hitInfo);
         requireMethod(runtime, "beginCriticalChanceCalculation", isoPlayer, isoGameCharacter);
         requireMethod(runtime, "endAccuracyCalculation");

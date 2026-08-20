@@ -87,6 +87,7 @@ public final class FirearmAimingPatches {
     public static final class StabilizationHitChance {
         @Patch.OnExit
         public static void exit(@Patch.Argument(0) IsoGameCharacter owner) {
+            FirearmAimRuntime.synchronizeTargetAcquisition(owner);
             FirearmAimRuntime.promoteStabilizationHitChance(owner);
         }
     }

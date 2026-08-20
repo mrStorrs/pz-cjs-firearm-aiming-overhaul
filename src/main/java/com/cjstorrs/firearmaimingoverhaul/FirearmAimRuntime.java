@@ -34,6 +34,7 @@ public final class FirearmAimRuntime {
     private static final float RECOIL_REOPEN_PER_LEVEL = 0.02F;
     private static final float EXCESS_SIGHT_BONUS_PER_TILE = 0.02F;
     private static final float MINIMUM_EXCESS_SIGHT_ACQUISITION_MULTIPLIER = 0.80F;
+    private static final float RETICLE_DIAGNOSTIC_DISTANCE_DELTA = 0.5F;
     private static final long NO_TARGET_KEY = 0L;
     private static final long OBJECT_TARGET_NAMESPACE = 1L << 62;
     private static final long HIT_INFO_TARGET_NAMESPACE = 1L << 61;
@@ -43,6 +44,8 @@ public final class FirearmAimRuntime {
     private static final Map<IsoGameCharacter, AimState> AIM_STATES =
         Collections.synchronizedMap(new WeakHashMap<>());
     private static final Map<IsoGameCharacter, TargetProfile> RETICLE_TARGETS =
+        Collections.synchronizedMap(new WeakHashMap<>());
+    private static final Map<IsoGameCharacter, TargetProfile> LOGGED_RETICLE_TARGETS =
         Collections.synchronizedMap(new WeakHashMap<>());
     private static final ThreadLocal<AccuracyScope> ACCURACY_SCOPE =
         ThreadLocal.withInitial(AccuracyScope::new);
@@ -57,6 +60,7 @@ public final class FirearmAimRuntime {
         if (!character.isAiming() || weapon == null) {
             AIM_STATES.remove(character);
             RETICLE_TARGETS.remove(character);
+            LOGGED_RETICLE_TARGETS.remove(character);
             return;
         }
 
@@ -300,9 +304,28 @@ public final class FirearmAimRuntime {
     public static void captureReticleTarget(IsoPlayer player) {
         if (!player.isAiming() || getAimedFirearm(player) == null) {
             RETICLE_TARGETS.remove(player);
+            LOGGED_RETICLE_TARGETS.remove(player);
             return;
         }
-        RETICLE_TARGETS.put(player, getLivePrimaryTarget(player));
+        TargetProfile target = getLivePrimaryTarget(player);
+        RETICLE_TARGETS.put(player, target);
+        if (FirearmAimSettings.isHeadshotDiagnosticLoggingEnabled()
+                && shouldLogReticleTarget(player, target)) {
+            HandWeapon weapon = getAimedFirearm(player);
+            logHeadshotDiagnostic(
+                "event=reticle_target"
+                    + " ownerId=" + player.getID()
+                    + " weapon=" + getWeaponType(weapon)
+                    + " targetKey=" + target.key
+                    + " targetDistance=" + formatDiagnosticFloat(target.distance)
+                    + " targetSource=" + target.source
+                    + " hitDistance=" + formatDiagnosticFloat(target.hitDistance)
+                    + " hitPointDistance=" + formatDiagnosticFloat(target.hitPointDistance)
+                    + " objectDistance=" + formatDiagnosticFloat(target.objectDistance)
+                    + " sightRange=" + formatDiagnosticFloat(weapon.getMaxSightRange(player))
+                    + " physicalRange=" + formatDiagnosticFloat(getPhysicalRange(player, weapon))
+            );
+        }
     }
 
     public static void beginAccuracyCalculation(
@@ -503,6 +526,7 @@ public final class FirearmAimRuntime {
     static void resetForTest() {
         AIM_STATES.clear();
         RETICLE_TARGETS.clear();
+        LOGGED_RETICLE_TARGETS.clear();
         ACCURACY_SCOPE.remove();
         SHOT_SCOPE.remove();
         SHOT_IDS.set(0L);
@@ -524,6 +548,18 @@ public final class FirearmAimRuntime {
         }
         String fullType = weapon.getFullType();
         return fullType == null || fullType.isEmpty() ? "unknown" : fullType;
+    }
+
+    private static boolean shouldLogReticleTarget(IsoGameCharacter character, TargetProfile target) {
+        TargetProfile previous = LOGGED_RETICLE_TARGETS.get(character);
+        if (previous != null
+                && previous.key == target.key
+                && previous.source.equals(target.source)
+                && Math.abs(previous.distance - target.distance) < RETICLE_DIAGNOSTIC_DISTANCE_DELTA) {
+            return false;
+        }
+        LOGGED_RETICLE_TARGETS.put(character, target);
+        return true;
     }
 
     private static int getTargetId(IsoGameCharacter target) {

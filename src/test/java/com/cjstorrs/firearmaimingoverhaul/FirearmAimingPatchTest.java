@@ -28,7 +28,7 @@ public final class FirearmAimingPatchTest {
         testWeaponChangeUsesTheNewWeaponAimingTime();
         testPhysicalTargetDistanceOverridesBowBallisticsHitDistance();
         testResolvedHitPointDistanceOverridesBowProxyPosition();
-        testAimTargetSurvivesOneMissingHitInfoUpdate();
+        testTargetAcquisitionDoesNotReuseNoTargetProgress();
         testFarAimAddsSecondsInsteadOfMultiplyingTinyTimers();
         testExcessSightBonusIsCapped();
         testConditionsBecomeAimTimeAtEveryRange();
@@ -254,29 +254,25 @@ public final class FirearmAimingPatchTest {
         checkClose(0.25F, hitInfo.distSq, "test must preserve the bad ballistic hit distance");
     }
 
-    private static void testAimTargetSurvivesOneMissingHitInfoUpdate() {
+    private static void testTargetAcquisitionDoesNotReuseNoTargetProgress() {
         resetRuntime();
         IsoPlayer player = createPlayer(15.0F, 0);
         HandWeapon weapon = (HandWeapon)player.getPrimaryHandItem();
         weapon.setMaxSightRange(6.0F);
         weapon.setMaxRange(16.0F);
-        setTarget(player, 16.0F, new IsoMovingObject(1));
+        runAimingUpdate(player, 56.25F);
         checkClose(
-            150.0F,
-            FirearmAimRuntime.calculateRequiredAimWork(player, weapon),
-            "maximum-range target establishes normal far acquisition"
+            0.0F,
+            player.getAimingDelay(),
+            "no-target work can finish before B42.20 resolves a far target"
         );
 
-        player.getHitInfoList().clear();
+        setTarget(player, 16.0F, new IsoMovingObject(1));
+        runAimingUpdate(player, 0.0F);
         checkClose(
-            150.0F,
-            FirearmAimRuntime.calculateRequiredAimWork(player, weapon),
-            "one missing hit-info update must retain far acquisition"
-        );
-        checkClose(
-            56.25F,
-            FirearmAimRuntime.calculateRequiredAimWork(player, weapon),
-            "sustained target loss must return to the normal no-target timer"
+            15.0F,
+            player.getAimingDelay(),
+            "acquiring a far target must restart acquisition instead of reusing no-target progress"
         );
     }
 

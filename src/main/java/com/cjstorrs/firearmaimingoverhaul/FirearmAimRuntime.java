@@ -130,6 +130,10 @@ public final class FirearmAimRuntime {
                     + " requiredWork=" + formatDiagnosticFloat(scope.requiredWork)
                     + " targetKey=" + scope.primaryTargetKey
                     + " targetDistance=" + formatDiagnosticFloat(scope.primaryTargetDistance)
+                    + " targetSource=" + primaryTarget.source
+                    + " hitDistance=" + formatDiagnosticFloat(primaryTarget.hitDistance)
+                    + " hitPointDistance=" + formatDiagnosticFloat(primaryTarget.hitPointDistance)
+                    + " objectDistance=" + formatDiagnosticFloat(primaryTarget.objectDistance)
             );
         }
     }
@@ -554,6 +558,23 @@ public final class FirearmAimRuntime {
         TargetProfile target = getPrimaryTarget(character);
         state.targetKey = target.key;
         state.targetInitialized = true;
+        if (FirearmAimSettings.isHeadshotDiagnosticLoggingEnabled()) {
+            logHeadshotDiagnostic(
+                "event=aim_start"
+                    + " ownerId=" + character.getID()
+                    + " weapon=" + getWeaponType(weapon)
+                    + " aimedFirearm=" + weapon.isAimedFirearm()
+                    + " ranged=" + weapon.isRanged()
+                    + " aimingTime=" + weapon.getAimingTime()
+                    + " sightRange=" + formatDiagnosticFloat(weapon.getMaxSightRange(character))
+                    + " physicalRange=" + formatDiagnosticFloat(getPhysicalRange(character, weapon))
+                    + " targetDistance=" + formatDiagnosticFloat(target.distance)
+                    + " targetSource=" + target.source
+                    + " hitDistance=" + formatDiagnosticFloat(target.hitDistance)
+                    + " hitPointDistance=" + formatDiagnosticFloat(target.hitPointDistance)
+                    + " objectDistance=" + formatDiagnosticFloat(target.objectDistance)
+            );
+        }
         return state;
     }
 
@@ -615,10 +636,34 @@ public final class FirearmAimRuntime {
         HitInfo hitInfo = hitInfoList.get(0);
         IsoMovingObject target = hitInfo.getObject();
         float hitDistance = (float)Math.sqrt(Math.max(0.0F, hitInfo.distSq));
-        float distance = target == null
-            ? hitDistance
-            : Math.max(hitDistance, getPhysicalTargetDistance(character, target));
-        return new TargetProfile(getTargetKey(hitInfo), distance);
+        float hitPointDistance = getHitPointDistance(character, hitInfo);
+        float objectDistance = target == null
+            ? Float.NaN
+            : getPhysicalTargetDistance(character, target);
+        float distance = hitDistance;
+        String source = "hit_info";
+        if (hitPointDistance > distance) {
+            distance = hitPointDistance;
+            source = "resolved_hit_point";
+        }
+        if (objectDistance > distance) {
+            distance = objectDistance;
+            source = "object_position";
+        }
+        return new TargetProfile(
+            getTargetKey(hitInfo),
+            distance,
+            source,
+            hitDistance,
+            hitPointDistance,
+            objectDistance
+        );
+    }
+
+    private static float getHitPointDistance(IsoGameCharacter character, HitInfo hitInfo) {
+        float deltaX = hitInfo.x - character.getX();
+        float deltaY = hitInfo.y - character.getY();
+        return (float)Math.sqrt(deltaX * deltaX + deltaY * deltaY);
     }
 
     private static float getPhysicalTargetDistance(
@@ -841,14 +886,35 @@ public final class FirearmAimRuntime {
 
     private static final class TargetProfile {
         private static final TargetProfile NONE =
-            new TargetProfile(NO_TARGET_KEY, 0.0F);
+            new TargetProfile(
+                NO_TARGET_KEY,
+                0.0F,
+                "none",
+                Float.NaN,
+                Float.NaN,
+                Float.NaN
+            );
 
         private final long key;
         private final float distance;
+        private final String source;
+        private final float hitDistance;
+        private final float hitPointDistance;
+        private final float objectDistance;
 
-        private TargetProfile(long key, float distance) {
+        private TargetProfile(
+                long key,
+                float distance,
+                String source,
+                float hitDistance,
+                float hitPointDistance,
+                float objectDistance) {
             this.key = key;
             this.distance = distance;
+            this.source = source;
+            this.hitDistance = hitDistance;
+            this.hitPointDistance = hitPointDistance;
+            this.objectDistance = objectDistance;
         }
     }
 }

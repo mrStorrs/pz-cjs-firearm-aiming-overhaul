@@ -110,6 +110,7 @@ public final class GameApiLinkageTest {
         );
 
         check(requireMethod(handWeapon, "isAimedFirearm").getReturnType() == boolean.class, "aimed-firearm return type");
+        check(requireMethod(handWeapon, "isRanged").getReturnType() == boolean.class, "ranged return type");
         check(requireMethod(handWeapon, "getAimingTime").getReturnType() == int.class, "aiming-time return type");
         check(
             requireMethod(handWeapon, "getMaxSightRange", isoGameCharacter).getReturnType() == float.class,
@@ -125,6 +126,8 @@ public final class GameApiLinkageTest {
         );
         check(requireMethod(inventoryItem, "getFullType").getReturnType() == String.class, "weapon full type");
         hitInfo.getField("distSq");
+        check(hitInfo.getField("x").getType() == float.class, "hit-point x type");
+        check(hitInfo.getField("y").getType() == float.class, "hit-point y type");
         check(hitInfo.getField("chance").getType() == int.class, "hit chance field type");
         check(requireMethod(hitInfo, "getObject").getReturnType() == isoMovingObject, "hit object return type");
         check(requireMethod(isoMovingObject, "getID").getReturnType() == int.class, "object id return type");

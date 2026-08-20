@@ -3,6 +3,9 @@ package zombie.network.fields.hit;
 import zombie.iso.IsoMovingObject;
 
 public class HitInfo {
+    public float x;
+    public float y;
+    public float z;
     public float distSq;
     public int chance;
     private IsoMovingObject object;

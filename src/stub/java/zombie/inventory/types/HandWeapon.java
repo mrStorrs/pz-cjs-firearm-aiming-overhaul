@@ -5,6 +5,7 @@ import zombie.inventory.InventoryItem;
 
 public class HandWeapon extends InventoryItem {
     private boolean aimedFirearm;
+    private boolean ranged;
     private int aimingTime;
     private float maximumSightRange;
     private float maximumRange;
@@ -16,6 +17,14 @@ public class HandWeapon extends InventoryItem {
 
     public void setAimedFirearm(boolean aimedFirearm) {
         this.aimedFirearm = aimedFirearm;
+    }
+
+    public boolean isRanged() {
+        return this.ranged;
+    }
+
+    public void setRanged(boolean ranged) {
+        this.ranged = ranged;
     }
 
     public int getAimingTime() {

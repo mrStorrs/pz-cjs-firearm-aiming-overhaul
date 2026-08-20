@@ -27,6 +27,7 @@ public final class FirearmAimingPatchTest {
         testSkillScaledMinimumLockTime();
         testWeaponChangeUsesTheNewWeaponAimingTime();
         testPhysicalTargetDistanceOverridesBowBallisticsHitDistance();
+        testResolvedHitPointDistanceOverridesBowProxyPosition();
         testFarAimAddsSecondsInsteadOfMultiplyingTinyTimers();
         testExcessSightBonusIsCapped();
         testConditionsBecomeAimTimeAtEveryRange();
@@ -225,6 +226,29 @@ public final class FirearmAimingPatchTest {
             150.0F,
             FirearmAimRuntime.calculateRequiredAimWork(player, bow),
             "a bow's far target must use world distance, not B42.20 hit-info distance"
+        );
+        checkClose(0.25F, hitInfo.distSq, "test must preserve the bad ballistic hit distance");
+    }
+
+    private static void testResolvedHitPointDistanceOverridesBowProxyPosition() {
+        resetRuntime();
+        IsoPlayer player = createPlayer(65.0F, 0);
+        HandWeapon bow = (HandWeapon)player.getPrimaryHandItem();
+        bow.setFullType("cjsSimpleBows.SB_Bow_crafted");
+        bow.setAimingTime(65);
+        bow.setMaxSightRange(6.0F);
+        bow.setMaxRange(16.0F);
+
+        IsoMovingObject ballisticProxy = new IsoMovingObject(1);
+        ballisticProxy.setX(0.5F);
+        HitInfo hitInfo = setTarget(player, 0.5F, ballisticProxy);
+        hitInfo.x = 16.0F;
+        hitInfo.y = 0.0F;
+
+        checkClose(
+            150.0F,
+            FirearmAimRuntime.calculateRequiredAimWork(player, bow),
+            "a bow's far target must use B42.20's resolved ballistic hit point"
         );
         checkClose(0.25F, hitInfo.distSq, "test must preserve the bad ballistic hit distance");
     }
@@ -1045,6 +1069,7 @@ public final class FirearmAimingPatchTest {
         HandWeapon weapon = new HandWeapon();
         weapon.setFullType("Base.TestFirearm");
         weapon.setAimedFirearm(aimedFirearm);
+        weapon.setRanged(aimedFirearm);
         weapon.setAimingTime(15);
         weapon.setMaxSightRange(6.0F);
         weapon.setMaxRange(16.0F);

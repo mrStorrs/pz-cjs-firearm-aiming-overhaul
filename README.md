@@ -12,8 +12,9 @@ acquisition time.
 - Changing to a Simple Bows weapon starts from that bow's own vanilla aiming
   time; it cannot inherit a shorter residual timer from a pistol.
 - B42.20 ballistic bows report a near-hit distance even for distant targets.
-  Their acquisition distance is therefore calculated from the player and
-  target positions, preserving the full far-range aiming curve.
+  Their acquisition distance therefore uses the resolved ballistic hit point
+  that B42.20 writes after camera-target selection, preserving the full
+  far-range aiming curve even when the hit object is only a nearby proxy.
 - Targets beyond effective sight follow a normalized clean-acquisition curve
   toward a skill-scaled ceiling: 4 seconds at Aiming 0, 3.5 seconds at
   Aiming 5, and 3 seconds at Aiming 10.

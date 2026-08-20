@@ -1,6 +1,7 @@
 package zombie.characters;
 
 import zombie.characters.skills.PerkFactory;
+import zombie.core.physics.BallisticsController;
 import zombie.inventory.InventoryItem;
 import zombie.iso.IsoMovingObject;
 import zombie.network.fields.hit.HitInfo;
@@ -14,6 +15,7 @@ public class IsoGameCharacter extends IsoMovingObject {
     private float health = 1.0F;
     private boolean zombie;
     private boolean animal;
+    private BallisticsController ballisticsController;
     private final PZArrayList<HitInfo> hitInfoList = new PZArrayList<>();
 
     public InventoryItem getPrimaryHandItem() {
@@ -74,5 +76,13 @@ public class IsoGameCharacter extends IsoMovingObject {
 
     public void setAnimal(boolean animal) {
         this.animal = animal;
+    }
+
+    public BallisticsController getBallisticsController() {
+        return this.ballisticsController;
+    }
+
+    public void setBallisticsController(BallisticsController ballisticsController) {
+        this.ballisticsController = ballisticsController;
     }
 }

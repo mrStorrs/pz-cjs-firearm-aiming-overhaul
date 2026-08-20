@@ -11,6 +11,7 @@ import me.zed_0xff.zombie_buddy.PatchEngine;
 import zombie.SandboxOptions;
 import zombie.characters.IsoGameCharacter;
 import zombie.characters.IsoPlayer;
+import zombie.core.physics.BallisticsController;
 import zombie.core.physics.RagdollBodyPart;
 import zombie.inventory.types.HandWeapon;
 import zombie.iso.IsoMovingObject;
@@ -31,7 +32,7 @@ public final class FirearmAimingPatchTest {
         testDistanceChangesOnSameTargetPreserveWork();
         testRecoilReopensMinimumSpread();
         testStabilizationProgressesHitChanceToGuarantee();
-        testShotHitChanceUsesPreRecoilStabilization();
+        testShotHitChanceUsesPreRecoilStabilizationForResolvedTarget();
         testFullyStabilizedTargetedHeadshotsAreLethal();
         testHeadshotDiagnosticsExplainDecision();
         testAccuracyChangesAreScopedToValidTargets();
@@ -423,7 +424,7 @@ public final class FirearmAimingPatchTest {
         );
     }
 
-    private static void testShotHitChanceUsesPreRecoilStabilization() {
+    private static void testShotHitChanceUsesPreRecoilStabilizationForResolvedTarget() {
         resetRuntime();
         IsoPlayer player = createPlayer(15.0F, 0);
         HandWeapon weapon = (HandWeapon)player.getPrimaryHandItem();
@@ -456,8 +457,8 @@ public final class FirearmAimingPatchTest {
         target.chance = 20;
         FirearmAimRuntime.promoteStabilizationHitChance(player);
         check(
-            target.chance < 100,
-            "pre-recoil snapshot must not guarantee a different target"
+            target.chance == 100,
+            "full-lock shot must guarantee the B42.20-resolved ballistic target"
         );
         FirearmAimRuntime.endShot();
     }
@@ -607,6 +608,33 @@ public final class FirearmAimingPatchTest {
                 0.4F
             ),
             "rerouted failed-damage headshots must not become lethal"
+        );
+
+        resetRuntime();
+        player = createPlayer(15.0F, 0);
+        weapon = (HandWeapon)player.getPrimaryHandItem();
+        zombie = new IsoGameCharacter();
+        zombie.setZombie(true);
+        zombie.setHealth(3.5F);
+        setTarget(player, 5.0F, zombie);
+        runAimingUpdate(player, 56.25F);
+        BallisticsController ballistics = new BallisticsController();
+        ballistics.setCachedTargetedBodyPart(
+            zombie.getID(),
+            RagdollBodyPart.BODYPART_HEAD.ordinal()
+        );
+        player.setBallisticsController(ballistics);
+        FirearmAimRuntime.captureShotStabilization(player, weapon);
+        checkClose(
+            3.5F,
+            FirearmAimRuntime.guaranteeLethalHeadshotDamage(
+                zombie,
+                weapon,
+                player,
+                false,
+                0.4F
+            ),
+            "cached B42.20 ballistic head target must be lethal before the callback"
         );
 
         FirearmAimRuntime.recordTargetedBodyPart(

@@ -8,6 +8,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import zombie.characters.IsoGameCharacter;
 import zombie.characters.IsoPlayer;
 import zombie.characters.skills.PerkFactory;
+import zombie.core.physics.BallisticsController;
 import zombie.core.physics.RagdollBodyPart;
 import zombie.inventory.InventoryItem;
 import zombie.inventory.types.HandWeapon;
@@ -193,17 +194,17 @@ public final class FirearmAimRuntime {
             result = "rejected_weapon_mismatch";
         } else if (target == null) {
             result = "rejected_null_target";
-        } else if (scope.targetedHead == null) {
-            result = "rejected_no_accepted_head_marker";
-        } else if (scope.targetedHead != target) {
-            result = "rejected_head_marker_target_mismatch";
         } else {
-            scope.targetedHead = null;
-            if (ignoreDamage) {
+            boolean targetedHead = scope.targetedHead == target
+                || hasCachedTargetedHead(wielder, target);
+            if (!targetedHead) {
+                result = "rejected_no_accepted_head_marker";
+            } else if (ignoreDamage) {
                 result = "rejected_ignore_damage";
             } else if (!target.isZombie() && !target.isAnimal()) {
                 result = "rejected_ineligible_target_type";
             } else {
+                scope.targetedHead = null;
                 resultDamage = Math.max(damage, targetHealth);
                 promoted = true;
                 result = "promoted_lethal_headshot";
@@ -262,14 +263,12 @@ public final class FirearmAimRuntime {
         }
 
         HitInfo primaryTarget = hitInfoList.get(0);
-        boolean capturedTarget = capturedShot
-            && getTargetKey(primaryTarget) == shot.primaryTargetKey;
-        if (!capturedTarget && !character.isAiming()) {
+        if (!capturedShot && !character.isAiming()) {
             return;
         }
 
         int originalChance = primaryTarget.chance;
-        float progress = capturedTarget
+        float progress = capturedShot
             ? shot.stabilizationProgress
             : getStabilizationProgress(character);
         primaryTarget.chance = calculatePromotedHitChance(
@@ -281,7 +280,7 @@ public final class FirearmAimRuntime {
             logHeadshotDiagnostic(
                 "event=hit_chance"
                     + " shot=" + shot.shotId
-                    + " source=" + (capturedTarget
+                    + " source=" + (capturedShot
                         ? "pre_recoil_snapshot"
                         : "live_target_state")
                     + " progress=" + formatDiagnosticFloat(progress)
@@ -619,6 +618,17 @@ public final class FirearmAimRuntime {
         HitInfo hitInfo = hitInfoList.get(0);
         float distance = (float)Math.sqrt(Math.max(0.0F, hitInfo.distSq));
         return new TargetProfile(getTargetKey(hitInfo), distance);
+    }
+
+    private static boolean hasCachedTargetedHead(
+            IsoGameCharacter wielder,
+            IsoGameCharacter target) {
+        BallisticsController ballistics = wielder.getBallisticsController();
+        return ballistics != null
+            && ballistics.isCameraTarget(target.getID())
+            && RagdollBodyPart.isHead(
+                ballistics.getCachedTargetedBodyPart(target.getID())
+            );
     }
 
     private static long getTargetKey(HitInfo hitInfo) {

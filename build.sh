@@ -2,8 +2,8 @@
 set -eu
 
 root_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-zombie_buddy_jar=${ZOMBIE_BUDDY_JAR:-/home/cjstorrs/Zomboid/mods/ZombieBuddy/libs/ZombieBuddy.jar}
-project_zomboid_jar=${PROJECT_ZOMBOID_JAR:-/home/cjstorrs/games/Project Zomboid Linux 42.19.0/game/projectzomboid/projectzomboid.jar}
+zombie_buddy_jar=${ZOMBIE_BUDDY_JAR:-/home/cjstorrs/games/Project Zomboid Linux 42.20.0/game/projectzomboid/ZombieBuddy.jar}
+project_zomboid_jar=${PROJECT_ZOMBOID_JAR:-/home/cjstorrs/games/Project Zomboid Linux 42.20.0/game/projectzomboid/projectzomboid.jar}
 project_zomboid_java=${PROJECT_ZOMBOID_JAVA:-$(dirname -- "$project_zomboid_jar")/jre64/bin/java}
 build_dir="$root_dir/build"
 stub_classes="$build_dir/classes/stub"

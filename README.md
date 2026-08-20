@@ -1,6 +1,6 @@
 # CJS Firearm Aiming Overhaul
 
-A Project Zomboid B42.19 ZombieBuddy mod that makes full stabilization
+A Project Zomboid B42.20 ZombieBuddy mod that makes full stabilization
 possible at every valid weapon range while balancing it with explicit
 acquisition time.
 
@@ -27,13 +27,15 @@ acquisition time.
   Vanilla recoil remains authoritative when it opens the crosshair farther.
 - If effective sight exceeds physical maximum range, normal acquisition is
   accelerated by 2% per excess sight tile, capped at a 20% speed bonus.
-- The primary target's real hit chance grows toward 100 along a late-biased
+- The resolved ballistic target's real hit chance grows toward 100 along a late-biased
   quadratic curve as stabilization work completes. This visibly tightens the
   crosshair throughout acquisition without over-rewarding a quick partial
   aim. Full stabilization still guarantees a damaging hit.
-- Project Zomboid's ballistics controller already records the body part under
-  the cursor. A fully stabilized damaging shot through its targeted head-shot
-  path kills zombies and animals. Players retain normal headshot damage.
+- Project Zomboid's ballistics controller records the body part under the
+  cursor. A fully stabilized damaging shot through its resolved targeted
+  head-shot path kills zombies and animals, including B42.20 bow shots whose
+  body-part callback arrives after damage resolution. Players retain normal
+  headshot damage.
 - Simple Bows works because its bows are aimed firearms and use the same live
   sight, maximum-range, skill, target, and stabilization calculations.
 
@@ -183,7 +185,8 @@ clean and condition maximums. If a save has not stored the new options yet,
 the runtime uses the new four-second defaults.
 
 Headshot diagnostics write a compact sequence for each shot to
-`~/Zomboid/console.txt` with the prefix
+`/home/cjstorrs/games/Project Zomboid Linux 42.20.0/user-data/Zomboid/console.txt`
+with the prefix
 `[cjsFirearmAimingOverhaul][headshot-debug]`. The sequence reports captured
 stabilization, Project Zomboid's targeted body part, the final damage decision,
 the pre-recoil and promoted hit chances, and a shot summary. Disable the sandbox
@@ -191,7 +194,7 @@ toggle after collecting the needed shots.
 
 ## Build
 
-The build requires Java 17 or newer, a local ZombieBuddy JAR, and the B42.19
+The build requires Java 17 or newer, a local ZombieBuddy JAR, and the B42.20
 Project Zomboid JAR. Compile-only API stubs bridge the game's newer Java
 bytecode to the Java 17 patch target; the stubs are not packaged.
 
@@ -202,7 +205,7 @@ bytecode to the Java 17 patch target; the stubs are not packaged.
 The tracked runtime JAR is written to
 `42/media/java/CJSFirearmAimingOverhaul.jar`. The build runs behavior and
 patch-discovery tests, then verifies every referenced method against the real
-B42.19 game JAR under Project Zomboid's bundled Java runtime.
+B42.20 game JAR under Project Zomboid's bundled Java runtime.
 
 ## In-Game Verification
 

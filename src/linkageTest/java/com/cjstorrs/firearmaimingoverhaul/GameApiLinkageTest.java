@@ -80,7 +80,6 @@ public final class GameApiLinkageTest {
             boolean.class
         );
         requireMethod(combatManager, "calculateHitInfoList", isoGameCharacter);
-        requireMethod(combatManager, "updateReticle", isoPlayer);
         requireMethod(combatManager, "calculateHitChanceData", isoGameCharacter, handWeapon, hitInfo);
         check(
             requireMethod(combatManager, "getDistanceModifier", float.class, float.class, float.class, boolean.class)
@@ -142,11 +141,6 @@ public final class GameApiLinkageTest {
             requireMethod(ballisticsController, "getCachedTargetedBodyPart", int.class).getReturnType() == int.class,
             "targeted-body-part return type"
         );
-        check(requireMethod(ballisticsController, "getCameraTargets").getReturnType() == float[].class, "camera targets type");
-        check(
-            requireMethod(ballisticsController, "getNumberOfCameraTargets").getReturnType() == int.class,
-            "camera target count type"
-        );
 
         Class<?> sandboxOptions = load(loader, "zombie.SandboxOptions");
         Class<?> sandboxOption = load(loader, "zombie.SandboxOptions$SandboxOption");
@@ -186,7 +180,6 @@ public final class GameApiLinkageTest {
         );
         requireMethod(runtime, "endShot");
         requireMethod(runtime, "promoteStabilizationHitChance", isoGameCharacter);
-        requireMethod(runtime, "captureReticleTarget", isoPlayer);
         requireMethod(runtime, "beginAccuracyCalculation", isoGameCharacter, handWeapon, hitInfo);
         requireMethod(runtime, "beginCriticalChanceCalculation", isoPlayer, isoGameCharacter);
         requireMethod(runtime, "endAccuracyCalculation");

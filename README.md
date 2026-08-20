@@ -168,11 +168,8 @@ reroutes failed-roll head targeting before this mod records the body part, so a
 reduced-damage graze cannot become lethal.
 
 Target identity comes from the primary `HitInfo` object's stable moving-object
-ID. The lock is synchronized only after B42.20 updates the on-screen reticle,
-so transient combat calculations cannot clear the target and reset aiming.
-A completed base lock immediately reopens when the same zombie is resolved at
-a farther distance. Changing zombies applies the retention and
-minimum-reacquisition rules.
+ID. Changing distance on the same zombie preserves absolute work; changing
+zombies applies the retention and minimum-reacquisition rules.
 
 After a shot, vanilla first adds its recoil and aiming delay. The mod converts
 that delay back into completion progress and then enforces the skill-scaled

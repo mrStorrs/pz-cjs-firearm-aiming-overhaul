@@ -34,7 +34,6 @@ public final class FirearmAimRuntime {
     private static final float RECOIL_REOPEN_PER_LEVEL = 0.02F;
     private static final float EXCESS_SIGHT_BONUS_PER_TILE = 0.02F;
     private static final float MINIMUM_EXCESS_SIGHT_ACQUISITION_MULTIPLIER = 0.80F;
-    private static final float TARGET_DIAGNOSTIC_DISTANCE_DELTA = 0.5F;
     private static final long NO_TARGET_KEY = 0L;
     private static final long OBJECT_TARGET_NAMESPACE = 1L << 62;
     private static final long HIT_INFO_TARGET_NAMESPACE = 1L << 61;
@@ -291,34 +290,6 @@ public final class FirearmAimRuntime {
                     + " progress=" + formatDiagnosticFloat(progress)
                     + " incomingChance=" + originalChance
                     + " outgoingChance=" + primaryTarget.chance
-            );
-        }
-    }
-
-    public static void synchronizeTargetAcquisition(IsoGameCharacter character) {
-        AimState state = AIM_STATES.get(character);
-        HandWeapon weapon = getAimedFirearm(character);
-        if (!character.isAiming() || state == null || state.weapon != weapon) {
-            return;
-        }
-
-        TargetProfile target = refreshRequirement(character, state);
-        character.setAimingDelay(state.getEffectiveDelay());
-        if (FirearmAimSettings.isHeadshotDiagnosticLoggingEnabled()
-                && state.shouldLogTargetSync(target)) {
-            logHeadshotDiagnostic(
-                "event=target_sync"
-                    + " ownerId=" + character.getID()
-                    + " weapon=" + getWeaponType(weapon)
-                    + " targetKey=" + target.key
-                    + " targetDistance=" + formatDiagnosticFloat(target.distance)
-                    + " targetSource=" + target.source
-                    + " hitDistance=" + formatDiagnosticFloat(target.hitDistance)
-                    + " hitPointDistance=" + formatDiagnosticFloat(target.hitPointDistance)
-                    + " objectDistance=" + formatDiagnosticFloat(target.objectDistance)
-                    + " completedWork=" + formatDiagnosticFloat(state.completedWork)
-                    + " requiredWork=" + formatDiagnosticFloat(state.requiredWork)
-                    + " aimingDelay=" + formatDiagnosticFloat(character.getAimingDelay())
             );
         }
     }
@@ -607,7 +578,7 @@ public final class FirearmAimRuntime {
         return state;
     }
 
-    private static TargetProfile refreshRequirement(IsoGameCharacter character, AimState state) {
+    private static void refreshRequirement(IsoGameCharacter character, AimState state) {
         TargetProfile target = getPrimaryTarget(character);
         boolean targetChanged = state.targetInitialized && state.targetKey != target.key;
         state.consumePendingPenalty(target.key, targetChanged);
@@ -637,7 +608,6 @@ public final class FirearmAimRuntime {
         ) * workRate;
         float requiredWork = Math.max(MINIMUM_DELAY, cleanWork + conditionWork);
         state.applyRequirement(target.key, requiredWork, aimingLevel, workRate);
-        return target;
     }
 
     private static void captureRecoverablePenalty(AccuracyScope scope) {
@@ -780,9 +750,6 @@ public final class FirearmAimRuntime {
         private float pendingPenalty;
         private float pendingPenaltyDistance = Float.MAX_VALUE;
         private boolean hasPendingPenalty;
-        private boolean targetDiagnosticInitialized;
-        private long loggedTargetKey;
-        private float loggedTargetDistance;
 
         private AimState(HandWeapon weapon, float baseDelay) {
             this.weapon = weapon;
@@ -836,19 +803,6 @@ public final class FirearmAimRuntime {
                     && Math.abs(distance - this.pendingPenaltyDistance) <= RANGE_EPSILON) {
                 this.pendingPenalty = Math.max(this.pendingPenalty, penalty);
             }
-        }
-
-        private boolean shouldLogTargetSync(TargetProfile target) {
-            if (!this.targetDiagnosticInitialized
-                    || this.loggedTargetKey != target.key
-                    || Math.abs(this.loggedTargetDistance - target.distance)
-                        >= TARGET_DIAGNOSTIC_DISTANCE_DELTA) {
-                this.targetDiagnosticInitialized = true;
-                this.loggedTargetKey = target.key;
-                this.loggedTargetDistance = target.distance;
-                return true;
-            }
-            return false;
         }
 
         private void consumePendingPenalty(long currentTargetKey, boolean targetChanged) {

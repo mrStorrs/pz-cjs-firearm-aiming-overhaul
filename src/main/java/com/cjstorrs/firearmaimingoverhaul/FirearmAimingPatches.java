@@ -91,14 +91,6 @@ public final class FirearmAimingPatches {
         }
     }
 
-    @Patch(className = "zombie.CombatManager", methodName = "updateReticle")
-    public static final class LiveReticleTargetSync {
-        @Patch.OnExit
-        public static void exit(@Patch.Argument(0) IsoPlayer player) {
-            FirearmAimRuntime.synchronizeTargetAcquisition(player);
-        }
-    }
-
     @Patch(className = "zombie.CombatManager", methodName = "calculateHitChanceData")
     public static final class HitChanceCalculationScope {
         @Patch.OnEnter

@@ -80,7 +80,6 @@ public final class GameApiLinkageTest {
             boolean.class
         );
         requireMethod(combatManager, "calculateHitInfoList", isoGameCharacter);
-        requireMethod(combatManager, "updateReticle", isoPlayer);
         requireMethod(combatManager, "calculateHitChanceData", isoGameCharacter, handWeapon, hitInfo);
         check(
             requireMethod(combatManager, "getDistanceModifier", float.class, float.class, float.class, boolean.class)
@@ -181,7 +180,6 @@ public final class GameApiLinkageTest {
         );
         requireMethod(runtime, "endShot");
         requireMethod(runtime, "promoteStabilizationHitChance", isoGameCharacter);
-        requireMethod(runtime, "synchronizeTargetAcquisition", isoGameCharacter);
         requireMethod(runtime, "beginAccuracyCalculation", isoGameCharacter, handWeapon, hitInfo);
         requireMethod(runtime, "beginCriticalChanceCalculation", isoPlayer, isoGameCharacter);
         requireMethod(runtime, "endAccuracyCalculation");

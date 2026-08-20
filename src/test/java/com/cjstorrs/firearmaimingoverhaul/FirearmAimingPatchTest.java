@@ -33,7 +33,6 @@ public final class FirearmAimingPatchTest {
         testConditionsBecomeAimTimeAtEveryRange();
         testTargetChangesRequireReacquisition();
         testDistanceChangesOnSameTargetPreserveWork();
-        testResolvedTargetSyncReopensLockAfterNoTargetStart();
         testRecoilReopensMinimumSpread();
         testStabilizationProgressesHitChanceToGuarantee();
         testShotHitChanceUsesPreRecoilStabilizationForResolvedTarget();
@@ -417,31 +416,6 @@ public final class FirearmAimingPatchTest {
         setTarget(player, 5.0F, target);
         runAimingUpdate(player, 0.0F);
         checkClose(0.0F, player.getAimingDelay(), "moving the same target closer keeps invested work");
-    }
-
-    private static void testResolvedTargetSyncReopensLockAfterNoTargetStart() {
-        resetRuntime();
-        IsoPlayer player = createPlayer(15.0F, 0);
-        HandWeapon weapon = (HandWeapon)player.getPrimaryHandItem();
-        weapon.setMaxRange(16.0F);
-
-        runAimingUpdate(player, 56.25F);
-        checkClose(0.0F, player.getAimingDelay(), "aiming without a resolved target can complete its base lock");
-
-        setTarget(player, 16.0F, new IsoMovingObject(1));
-        FirearmAimRuntime.synchronizeTargetAcquisition(player);
-        checkClose(
-            10.5F,
-            player.getAimingDelay(),
-            "a newly resolved distant target must immediately reopen a completed base lock"
-        );
-
-        setTarget(player, 5.0F, new IsoMovingObject(1));
-        FirearmAimRuntime.synchronizeTargetAcquisition(player);
-        check(
-            player.getAimingDelay() > 0.0F,
-            "moving a resolved target must not keep its previous fully locked delay"
-        );
     }
 
     private static void testRecoilReopensMinimumSpread() {
@@ -925,11 +899,6 @@ public final class FirearmAimingPatchTest {
             "calculateHitInfoList"
         );
         assertPatchTarget(
-            FirearmAimingPatches.LiveReticleTargetSync.class,
-            "zombie.CombatManager",
-            "updateReticle"
-        );
-        assertPatchTarget(
             FirearmAimingPatches.HitChanceCalculationScope.class,
             "zombie.CombatManager",
             "calculateHitChanceData"
@@ -1071,7 +1040,6 @@ public final class FirearmAimingPatchTest {
             FirearmAimingPatches.LethalHeadshot.class,
             FirearmAimingPatches.ShotCleanup.class,
             FirearmAimingPatches.StabilizationHitChance.class,
-            FirearmAimingPatches.LiveReticleTargetSync.class,
             FirearmAimingPatches.HitChanceCalculationScope.class,
             FirearmAimingPatches.CriticalChanceCalculationScope.class,
             FirearmAimingPatches.DistanceModifier.class,

@@ -35,6 +35,7 @@ public final class FirearmAimRuntime {
     private static final float EXCESS_SIGHT_BONUS_PER_TILE = 0.02F;
     private static final float MINIMUM_EXCESS_SIGHT_ACQUISITION_MULTIPLIER = 0.80F;
     private static final float RETICLE_DIAGNOSTIC_DISTANCE_DELTA = 0.5F;
+    private static final int RETICLE_TARGET_LOSS_GRACE_UPDATES = 3;
     private static final long NO_TARGET_KEY = 0L;
     private static final long OBJECT_TARGET_NAMESPACE = 1L << 62;
     private static final long HIT_INFO_TARGET_NAMESPACE = 1L << 61;
@@ -43,7 +44,7 @@ public final class FirearmAimRuntime {
     private static final AtomicLong SHOT_IDS = new AtomicLong();
     private static final Map<IsoGameCharacter, AimState> AIM_STATES =
         Collections.synchronizedMap(new WeakHashMap<>());
-    private static final Map<IsoGameCharacter, TargetProfile> RETICLE_TARGETS =
+    private static final Map<IsoGameCharacter, ReticleTargetState> RETICLE_TARGETS =
         Collections.synchronizedMap(new WeakHashMap<>());
     private static final Map<IsoGameCharacter, TargetProfile> LOGGED_RETICLE_TARGETS =
         Collections.synchronizedMap(new WeakHashMap<>());
@@ -307,8 +308,13 @@ public final class FirearmAimRuntime {
             LOGGED_RETICLE_TARGETS.remove(player);
             return;
         }
-        TargetProfile target = getLivePrimaryTarget(player);
-        RETICLE_TARGETS.put(player, target);
+        TargetProfile observedTarget = getLivePrimaryTarget(player);
+        ReticleTargetState targetState = RETICLE_TARGETS.get(player);
+        if (targetState == null) {
+            targetState = new ReticleTargetState();
+            RETICLE_TARGETS.put(player, targetState);
+        }
+        TargetProfile target = targetState.capture(observedTarget);
         if (FirearmAimSettings.isHeadshotDiagnosticLoggingEnabled()
                 && shouldLogReticleTarget(player, target)) {
             HandWeapon weapon = getAimedFirearm(player);
@@ -319,6 +325,7 @@ public final class FirearmAimRuntime {
                     + " targetKey=" + target.key
                     + " targetDistance=" + formatDiagnosticFloat(target.distance)
                     + " targetSource=" + target.source
+                    + " observedSource=" + observedTarget.source
                     + " hitDistance=" + formatDiagnosticFloat(target.hitDistance)
                     + " hitPointDistance=" + formatDiagnosticFloat(target.hitPointDistance)
                     + " objectDistance=" + formatDiagnosticFloat(target.objectDistance)
@@ -676,8 +683,8 @@ public final class FirearmAimRuntime {
     }
 
     private static TargetProfile getPrimaryTarget(IsoGameCharacter character) {
-        TargetProfile reticleTarget = RETICLE_TARGETS.get(character);
-        return reticleTarget == null ? getLivePrimaryTarget(character) : reticleTarget;
+        ReticleTargetState reticleTarget = RETICLE_TARGETS.get(character);
+        return reticleTarget == null ? getLivePrimaryTarget(character) : reticleTarget.target;
     }
 
     private static TargetProfile getLivePrimaryTarget(IsoGameCharacter character) {
@@ -1002,6 +1009,22 @@ public final class FirearmAimRuntime {
             this.hitDistance = hitDistance;
             this.hitPointDistance = hitPointDistance;
             this.objectDistance = objectDistance;
+        }
+    }
+
+    private static final class ReticleTargetState {
+        private TargetProfile target = TargetProfile.NONE;
+        private int consecutiveMissingUpdates;
+
+        private TargetProfile capture(TargetProfile observedTarget) {
+            if (observedTarget.key != NO_TARGET_KEY) {
+                this.target = observedTarget;
+                this.consecutiveMissingUpdates = 0;
+            } else if (this.target.key == NO_TARGET_KEY
+                    || ++this.consecutiveMissingUpdates >= RETICLE_TARGET_LOSS_GRACE_UPDATES) {
+                this.target = TargetProfile.NONE;
+            }
+            return this.target;
         }
     }
 }

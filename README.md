@@ -169,9 +169,10 @@ reduced-damage graze cannot become lethal.
 
 Target identity comes from the primary `HitInfo` object's stable moving-object
 ID. At maximum range, where B42.20 can omit a `HitInfo`, acquisition instead
-uses the first resolved camera-ballistics target from the completed reticle
-update. Changing distance on the same zombie preserves absolute work; changing
-zombies applies the retention and minimum-reacquisition rules.
+uses the resolved reticle target. Brief target-list flickers do not reset that
+lock; sustained target loss still does. Changing distance on the same zombie
+preserves absolute work; changing zombies applies the retention and
+minimum-reacquisition rules.
 
 After a shot, vanilla first adds its recoil and aiming delay. The mod converts
 that delay back into completion progress and then enforces the skill-scaled

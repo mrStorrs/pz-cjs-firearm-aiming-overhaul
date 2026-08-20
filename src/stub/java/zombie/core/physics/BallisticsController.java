@@ -24,6 +24,10 @@ public class BallisticsController {
         this.numberOfCameraTargets = 1;
     }
 
+    public void clearCameraTargetsForTest() {
+        this.numberOfCameraTargets = 0;
+    }
+
     public boolean isCameraTarget(int targetId) {
         return this.cachedTargetedBodyParts.containsKey(targetId);
     }

@@ -6,7 +6,7 @@ public final class Main {
 
     public static void main(String[] args) {
         System.out.println(
-            "[cjsFirearmAimingOverhaul] Loading v1.9.8 reticle-range diagnostics."
+            "[cjsFirearmAimingOverhaul] Loading v1.9.9 reticle-target stability patches."
         );
     }
 }

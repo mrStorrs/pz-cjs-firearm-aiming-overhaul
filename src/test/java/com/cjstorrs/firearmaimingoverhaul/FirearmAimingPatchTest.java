@@ -29,6 +29,7 @@ public final class FirearmAimingPatchTest {
         testPhysicalTargetDistanceOverridesBowBallisticsHitDistance();
         testResolvedHitPointDistanceOverridesBowProxyPosition();
         testReticleCameraTargetProvidesMaximumRangeWithoutHitInfo();
+        testReticleTargetSurvivesBriefMissingUpdate();
         testFarAimAddsSecondsInsteadOfMultiplyingTinyTimers();
         testExcessSightBonusIsCapped();
         testConditionsBecomeAimTimeAtEveryRange();
@@ -271,6 +272,26 @@ public final class FirearmAimingPatchTest {
             150.0F,
             FirearmAimRuntime.calculateRequiredAimWork(player, bow),
             "a maximum-range camera target must not fall back to the bow's bare timer"
+        );
+    }
+
+    private static void testReticleTargetSurvivesBriefMissingUpdate() {
+        resetRuntime();
+        IsoPlayer player = createPlayer(65.0F, 0);
+        HandWeapon bow = (HandWeapon)player.getPrimaryHandItem();
+        bow.setMaxSightRange(6.0F);
+        bow.setMaxRange(16.0F);
+        BallisticsController ballistics = new BallisticsController();
+        ballistics.setCameraTargetForTest(1, 16.0F, 0.0F, RagdollBodyPart.BODYPART_HEAD.ordinal());
+        player.setBallisticsController(ballistics);
+        FirearmAimRuntime.captureReticleTarget(player);
+
+        ballistics.clearCameraTargetsForTest();
+        FirearmAimRuntime.captureReticleTarget(player);
+        checkClose(
+            150.0F,
+            FirearmAimRuntime.calculateRequiredAimWork(player, bow),
+            "one missing reticle update must not reset a maximum-range lock to the bare timer"
         );
     }
 

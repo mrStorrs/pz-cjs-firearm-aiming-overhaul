@@ -25,6 +25,7 @@ public final class FirearmAimingPatchTest {
         testHybridCurveDefaultsAndConfiguration();
         testHybridCurveNormalizesWeaponGap();
         testSkillScaledMinimumLockTime();
+        testWeaponChangeUsesTheNewWeaponAimingTime();
         testFarAimAddsSecondsInsteadOfMultiplyingTinyTimers();
         testExcessSightBonusIsCapped();
         testConditionsBecomeAimTimeAtEveryRange();
@@ -180,6 +181,30 @@ public final class FirearmAimingPatchTest {
             FirearmAimRuntime.calculateRequiredAimWork(player, weapon),
             "a slower weapon keeps its longer vanilla time"
         );
+    }
+
+    private static void testWeaponChangeUsesTheNewWeaponAimingTime() {
+        resetRuntime();
+        IsoPlayer player = createPlayer(25.0F, 0);
+        HandWeapon bow = (HandWeapon)player.getPrimaryHandItem();
+        bow.setFullType("cjsSimpleBows.SB_Bow_crafted");
+        bow.setAimingTime(65);
+        player.setAimingDelay(25.0F);
+        setTarget(player, 5.0F, new IsoMovingObject(1));
+
+        checkClose(
+            65.0F,
+            FirearmAimRuntime.calculateRequiredAimWork(player, bow),
+            "switching from a pistol must not shorten a crafted bow's aim time"
+        );
+
+        FirearmAimRuntime.beforeAimingDelayUpdate(player);
+        checkClose(
+            65.0F,
+            player.getAimingDelay(),
+            "a new bow aim must start from its full vanilla delay"
+        );
+        FirearmAimRuntime.afterAimingDelayUpdate(player);
     }
 
     private static void testFarAimAddsSecondsInsteadOfMultiplyingTinyTimers() {

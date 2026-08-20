@@ -548,12 +548,9 @@ public final class FirearmAimRuntime {
     }
 
     private static AimState createState(IsoGameCharacter character, HandWeapon weapon) {
-        float currentDelay = character.getAimingDelay();
-        float baseDelay = currentDelay > MINIMUM_DELAY
-            ? currentDelay
-            : Math.max(MINIMUM_DELAY, (float)weapon.getAimingTime());
+        float baseDelay = Math.max(MINIMUM_DELAY, (float)weapon.getAimingTime());
         AimState state = new AimState(weapon, baseDelay);
-        state.completedWork = Math.max(0.0F, baseDelay - currentDelay);
+        state.completedWork = 0.0F;
         TargetProfile target = getPrimaryTarget(character);
         state.targetKey = target.key;
         state.targetInitialized = true;

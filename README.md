@@ -9,6 +9,8 @@ acquisition time.
 - Every aimed firearm has a minimum target-lock time. Aiming 0 starts at 1.5
   seconds, Aiming 5 at 1.1 seconds, and Aiming 10 at 0.7 seconds. A weapon's
   vanilla aiming time still wins when it is longer.
+- Changing to a Simple Bows weapon starts from that bow's own vanilla aiming
+  time; it cannot inherit a shorter residual timer from a pistol.
 - Targets beyond effective sight follow a normalized clean-acquisition curve
   toward a skill-scaled ceiling: 4 seconds at Aiming 0, 3.5 seconds at
   Aiming 5, and 3 seconds at Aiming 10.

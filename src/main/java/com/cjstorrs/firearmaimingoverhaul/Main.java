@@ -6,7 +6,7 @@ public final class Main {
 
     public static void main(String[] args) {
         System.out.println(
-            "[cjsFirearmAimingOverhaul] Loading v1.9.10 stable firearm aiming behavior."
+            "[cjsFirearmAimingOverhaul] Loading v1.9.11 stable far-target acquisition."
         );
     }
 }

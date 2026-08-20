@@ -28,6 +28,7 @@ public final class FirearmAimingPatchTest {
         testWeaponChangeUsesTheNewWeaponAimingTime();
         testPhysicalTargetDistanceOverridesBowBallisticsHitDistance();
         testResolvedHitPointDistanceOverridesBowProxyPosition();
+        testAimTargetSurvivesOneMissingHitInfoUpdate();
         testFarAimAddsSecondsInsteadOfMultiplyingTinyTimers();
         testExcessSightBonusIsCapped();
         testConditionsBecomeAimTimeAtEveryRange();
@@ -251,6 +252,32 @@ public final class FirearmAimingPatchTest {
             "a bow's far target must use B42.20's resolved ballistic hit point"
         );
         checkClose(0.25F, hitInfo.distSq, "test must preserve the bad ballistic hit distance");
+    }
+
+    private static void testAimTargetSurvivesOneMissingHitInfoUpdate() {
+        resetRuntime();
+        IsoPlayer player = createPlayer(15.0F, 0);
+        HandWeapon weapon = (HandWeapon)player.getPrimaryHandItem();
+        weapon.setMaxSightRange(6.0F);
+        weapon.setMaxRange(16.0F);
+        setTarget(player, 16.0F, new IsoMovingObject(1));
+        checkClose(
+            150.0F,
+            FirearmAimRuntime.calculateRequiredAimWork(player, weapon),
+            "maximum-range target establishes normal far acquisition"
+        );
+
+        player.getHitInfoList().clear();
+        checkClose(
+            150.0F,
+            FirearmAimRuntime.calculateRequiredAimWork(player, weapon),
+            "one missing hit-info update must retain far acquisition"
+        );
+        checkClose(
+            56.25F,
+            FirearmAimRuntime.calculateRequiredAimWork(player, weapon),
+            "sustained target loss must return to the normal no-target timer"
+        );
     }
 
     private static void testFarAimAddsSecondsInsteadOfMultiplyingTinyTimers() {

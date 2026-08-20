@@ -34,6 +34,7 @@ public final class FirearmAimRuntime {
     private static final float RECOIL_REOPEN_PER_LEVEL = 0.02F;
     private static final float EXCESS_SIGHT_BONUS_PER_TILE = 0.02F;
     private static final float MINIMUM_EXCESS_SIGHT_ACQUISITION_MULTIPLIER = 0.80F;
+    private static final int TRANSIENT_TARGET_LOSS_UPDATES = 1;
     private static final long NO_TARGET_KEY = 0L;
     private static final long OBJECT_TARGET_NAMESPACE = 1L << 62;
     private static final long HIT_INFO_TARGET_NAMESPACE = 1L << 61;
@@ -579,7 +580,7 @@ public final class FirearmAimRuntime {
     }
 
     private static void refreshRequirement(IsoGameCharacter character, AimState state) {
-        TargetProfile target = getPrimaryTarget(character);
+        TargetProfile target = state.resolveAimTarget(getPrimaryTarget(character));
         boolean targetChanged = state.targetInitialized && state.targetKey != target.key;
         state.consumePendingPenalty(target.key, targetChanged);
 
@@ -750,6 +751,8 @@ public final class FirearmAimRuntime {
         private float pendingPenalty;
         private float pendingPenaltyDistance = Float.MAX_VALUE;
         private boolean hasPendingPenalty;
+        private TargetProfile lastAimTarget = TargetProfile.NONE;
+        private int consecutiveMissingTargetUpdates;
 
         private AimState(HandWeapon weapon, float baseDelay) {
             this.weapon = weapon;
@@ -766,6 +769,20 @@ public final class FirearmAimRuntime {
 
         private float getRemainingWork() {
             return Math.max(0.0F, this.requiredWork - this.completedWork);
+        }
+
+        private TargetProfile resolveAimTarget(TargetProfile observedTarget) {
+            if (observedTarget.key != NO_TARGET_KEY) {
+                this.lastAimTarget = observedTarget;
+                this.consecutiveMissingTargetUpdates = 0;
+                return observedTarget;
+            }
+            if (this.lastAimTarget.key != NO_TARGET_KEY
+                    && this.consecutiveMissingTargetUpdates++ < TRANSIENT_TARGET_LOSS_UPDATES) {
+                return this.lastAimTarget;
+            }
+            this.lastAimTarget = TargetProfile.NONE;
+            return TargetProfile.NONE;
         }
 
         private void applyRequirement(

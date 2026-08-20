@@ -613,8 +613,20 @@ public final class FirearmAimRuntime {
         }
 
         HitInfo hitInfo = hitInfoList.get(0);
-        float distance = (float)Math.sqrt(Math.max(0.0F, hitInfo.distSq));
+        IsoMovingObject target = hitInfo.getObject();
+        float hitDistance = (float)Math.sqrt(Math.max(0.0F, hitInfo.distSq));
+        float distance = target == null
+            ? hitDistance
+            : Math.max(hitDistance, getPhysicalTargetDistance(character, target));
         return new TargetProfile(getTargetKey(hitInfo), distance);
+    }
+
+    private static float getPhysicalTargetDistance(
+            IsoGameCharacter character,
+            IsoMovingObject target) {
+        float deltaX = target.getX() - character.getX();
+        float deltaY = target.getY() - character.getY();
+        return (float)Math.sqrt(deltaX * deltaX + deltaY * deltaY);
     }
 
     private static boolean hasCachedTargetedHead(

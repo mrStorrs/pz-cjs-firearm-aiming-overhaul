@@ -128,6 +128,8 @@ public final class GameApiLinkageTest {
         check(hitInfo.getField("chance").getType() == int.class, "hit chance field type");
         check(requireMethod(hitInfo, "getObject").getReturnType() == isoMovingObject, "hit object return type");
         check(requireMethod(isoMovingObject, "getID").getReturnType() == int.class, "object id return type");
+        check(requireMethod(isoMovingObject, "getX").getReturnType() == float.class, "object x return type");
+        check(requireMethod(isoMovingObject, "getY").getReturnType() == float.class, "object y return type");
         check(
             requireMethod(ballisticsController, "isCameraTarget", int.class).getReturnType() == boolean.class,
             "camera-target return type"

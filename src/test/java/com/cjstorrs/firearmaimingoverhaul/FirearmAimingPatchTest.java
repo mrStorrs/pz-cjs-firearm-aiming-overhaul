@@ -26,6 +26,7 @@ public final class FirearmAimingPatchTest {
         testHybridCurveNormalizesWeaponGap();
         testSkillScaledMinimumLockTime();
         testWeaponChangeUsesTheNewWeaponAimingTime();
+        testPhysicalTargetDistanceOverridesBowBallisticsHitDistance();
         testFarAimAddsSecondsInsteadOfMultiplyingTinyTimers();
         testExcessSightBonusIsCapped();
         testConditionsBecomeAimTimeAtEveryRange();
@@ -205,6 +206,27 @@ public final class FirearmAimingPatchTest {
             "a new bow aim must start from its full vanilla delay"
         );
         FirearmAimRuntime.afterAimingDelayUpdate(player);
+    }
+
+    private static void testPhysicalTargetDistanceOverridesBowBallisticsHitDistance() {
+        resetRuntime();
+        IsoPlayer player = createPlayer(65.0F, 0);
+        HandWeapon bow = (HandWeapon)player.getPrimaryHandItem();
+        bow.setFullType("cjsSimpleBows.SB_Bow_crafted");
+        bow.setAimingTime(65);
+        bow.setMaxSightRange(6.0F);
+        bow.setMaxRange(16.0F);
+
+        IsoMovingObject distantTarget = new IsoMovingObject(1);
+        distantTarget.setX(16.0F);
+        HitInfo hitInfo = setTarget(player, 0.5F, distantTarget);
+
+        checkClose(
+            150.0F,
+            FirearmAimRuntime.calculateRequiredAimWork(player, bow),
+            "a bow's far target must use world distance, not B42.20 hit-info distance"
+        );
+        checkClose(0.25F, hitInfo.distSq, "test must preserve the bad ballistic hit distance");
     }
 
     private static void testFarAimAddsSecondsInsteadOfMultiplyingTinyTimers() {
